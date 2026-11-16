@@ -22,6 +22,7 @@ const APPS: Record<string, { kind: CallKind; ids: string[] }> = {
   Teams: { kind: 'teams', ids: ['com.microsoft.teams2', 'com.microsoft.teams', 'teams-for-linux', 'com.github.IsmaelMartinez.teams_for_linux'] },
   Chrome: { kind: 'meet', ids: ['com.google.Chrome', 'chrome', 'google-chrome'] },
   Arc: { kind: 'meet', ids: ['company.thebrowser.Browser'] },
+  Ardia: { kind: 'meet', ids: ['com.ardia.browser'] },
   Brave: { kind: 'meet', ids: ['com.brave.Browser', 'brave'] },
   Edge: { kind: 'meet', ids: ['com.microsoft.edgemac', 'msedge', 'com.microsoft.Edge'] },
   Safari: { kind: 'meet', ids: ['com.apple.Safari'] },

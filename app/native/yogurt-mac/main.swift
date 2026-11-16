@@ -6,7 +6,7 @@
 //   yogurt-mac events FROM TO        → meetings between two ISO dates (all-day and cancelled ones left out)
 //   yogurt-mac mic-apps              → [{"bundleId","name","pid"}] of processes using audio input right now
 //   yogurt-mac running-apps ID...    → the supplied bundle IDs currently present in NSRunningApplication
-//   yogurt-mac browser-title ID      → {"title":string|null}: the front tab's name in Chrome, Arc, Edge, Brave or Safari (only if running)
+//   yogurt-mac browser-title ID      → {"title":string|null}: the front tab's name in Chrome, Arc, Ardia, Edge, Brave or Safari (only if running)
 //   yogurt-mac permissions           → {"mic":"authorized"|"denied"|"restricted"|"notDetermined","systemAudio":0|1|2,"calendar":…,
 //                                       "accessibility":bool}
 //   yogurt-mac media-auth            → asks once to control each running player (the system's own prompt), then {"players"}
@@ -200,7 +200,7 @@ func browserTitle(_ id: String) -> String? {
     return axText(axAttr(window as! AXUIElement, kAXTitleAttribute))
   }
   let safari = id == "com.apple.Safari"
-  guard ["com.google.Chrome", "company.thebrowser.Browser", "com.microsoft.edgemac", "com.brave.Browser", "com.apple.Safari"].contains(id),
+  guard ["com.google.Chrome", "company.thebrowser.Browser", "com.ardia.browser", "com.microsoft.edgemac", "com.brave.Browser", "com.apple.Safari"].contains(id),
         !NSRunningApplication.runningApplications(withBundleIdentifier: id).isEmpty else { return nil }
   let src = "tell application id \"\(id)\" to get " + (safari ? "name of current tab of front window" : "title of active tab of front window")
   var err: NSDictionary?
@@ -216,7 +216,7 @@ func browserTitle(_ id: String) -> String? {
  * an assistive app asks, so they are asked the way screen readers do (AXManualAccessibility), and only for a call window.
  */
 let axKeys = [kAXRoleAttribute, kAXSubroleAttribute, kAXDescriptionAttribute, kAXTitleAttribute, kAXValueAttribute, kAXIdentifierAttribute, "AXDOMClassList", kAXChildrenAttribute, kAXSizeAttribute] as [String]
-let chromium: Set<String> = ["com.google.Chrome", "company.thebrowser.Browser", "com.brave.Browser", "com.microsoft.edgemac", "com.microsoft.teams", "com.microsoft.teams2"]
+let chromium: Set<String> = ["com.google.Chrome", "company.thebrowser.Browser", "com.ardia.browser", "com.brave.Browser", "com.microsoft.edgemac", "com.microsoft.teams", "com.microsoft.teams2"]
 var askedTree = Set<pid_t>()
 
 func axAttr(_ e: AXUIElement, _ name: String) -> AnyObject? {

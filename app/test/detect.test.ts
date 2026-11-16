@@ -97,7 +97,7 @@ describe('real bundle ids', () => {
     ['net.whatsapp.WhatsApp', 'WhatsApp'], ['WhatsApp', 'WhatsApp'],
   ])('%s is %s', (id, name) => expect(p(id)).toBe(name))
   it.each([
-    ['com.google.Chrome', 'Chrome'], ['company.thebrowser.Browser', 'Arc'], ['com.microsoft.edgemac', 'Edge'],
+    ['com.google.Chrome', 'Chrome'], ['company.thebrowser.Browser', 'Arc'], ['com.ardia.browser', 'Ardia'], ['com.microsoft.edgemac', 'Edge'],
     ['org.mozilla.firefox', 'Firefox'], ['com.brave.Browser', 'Brave'],
     ['com.apple.Safari', 'Safari'], ['com.apple.WebKit.WebContent', 'Safari'], ['com.apple.WebKit.GPU', 'Safari'],
   ])('browser %s is %s once the tab is a call', (id, name) => expect(p(id, { title: 'Zoom Meeting' })).toBe(name))
@@ -154,7 +154,7 @@ describe('audio helpers need their running owner', () => {
 
 
 describe('all supported browsers need a call sign', () => {
-  it.each(['com.google.Chrome', 'com.apple.Safari', 'com.microsoft.edgemac', 'org.mozilla.firefox', 'company.thebrowser.Browser', 'com.brave.Browser'])('%s never triggers from mic use alone', bundleId => {
+  it.each(['com.google.Chrome', 'com.apple.Safari', 'com.microsoft.edgemac', 'org.mozilla.firefox', 'company.thebrowser.Browser', 'com.ardia.browser', 'com.brave.Browser'])('%s never triggers from mic use alone', bundleId => {
     const mic = { bundleId, name: 'Browser' }
     expect(tabTitleApp(bundleId)).toBe(bundleId)
     expect(decide(sig({ micApps: [mic] }), NOW, none)).toBeNull()
