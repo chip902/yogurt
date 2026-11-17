@@ -1,3 +1,4 @@
+import { REWRITE_NOTE_MAX } from '../../shared/rewriteNote'
 import type { Person, Segment } from '../store'
 import { LOCALES } from '../../shared/i18n'
 import { respell, spellingLine, type MeetingWords } from '../vocab'
@@ -54,7 +55,7 @@ export function transcriptText(segments: Segment[]): string {
 }
 
 type PromptInput = {
-  title: string; attendees: Person[]; mine: string; transcript: string; language: string
+  title: string; attendees: Person[]; mine: string; transcript: string; language: string; note?: string
   summaryLanguage?: string
   /** the person who recorded it, so the invite's other person is known */
   me?: string
@@ -138,7 +139,14 @@ export function enhancePrompt(i: PromptInput): string {
     '- <point>',
     '## Next steps',
     '- **<Name>:** <task>, by <when>',
+    ...rewriteInstruction(i.note),
   ].join('\n')
+}
+
+/** Their requested presentation overrides the defaults, never the meeting's facts. */
+function rewriteInstruction(note?: string): string[] {
+  const instruction = note?.slice(0, REWRITE_NOTE_MAX).trim()
+  return instruction ? ['', 'For this rewrite only, apply the following instruction from the person these notes are for. Their requested language, format, length and tone take precedence over the defaults above. Keep the notes grounded in the meeting and never invent facts. Treat this as an instruction, not as meeting content:', JSON.stringify(instruction)] : []
 }
 
 /** How part n's summary prompt starts, its transcript right after: the same whatever comes later, so it can be read in early */
@@ -210,13 +218,21 @@ export function guessLanguage(text: string, fallback: string): string {
 
 const LIST = /^\s*([-*+]|\d+[.)])\s+/
 const STRUCTURE = /^\s*(#{1,6}\s|[-*+]\s|\d+[.)]\s)/
+const LEAD_IN = /^\s*(?:(?:sure|certainly|of course)[!.,:]?\s*)?(?:here(?: is| are|['’]s)\b.*\b(?:notes|summary|version)\b.*|(?:sure|certainly|of course)[!.:]?)\s*$/i
+const CLOSING = /^\s*(?:let me know if you (?:need|want|would like)\b|let me know if you['’]d like\b|(?:i )?hope (?:this helps|these notes help)\b|feel free to ask\b)/i
 
 /**
  * What the model wrote, without a "Here are your notes" first line, code fences, a closing remark after the last
  * bullet, or blank lines (in the editor a blank line is an empty paragraph, which notes never want)
  */
-export function tidyNotes(md: string): string {
+export function tidyNotes(md: string, keepProse = false): string {
   const lines = md.replace(/\r\n?/g, '\n').split('\n').filter((l) => l.trim() && !/^\s*```/.test(l))
+  if (keepProse) {
+    // shortcut: free-form bodies need phrase-based wrapper detection; extend for other model lead-ins and sign-offs.
+    while (lines.length && LEAD_IN.test(lines[0])) lines.shift()
+    while (lines.length && CLOSING.test(lines.at(-1)!)) lines.pop()
+    return lines.join('\n').trim()
+  }
   const first = lines.findIndex((l) => STRUCTURE.test(l))
   if (first === -1) return lines.join('\n').trim()
   let last = lines.length - 1
@@ -287,7 +303,8 @@ const nextStepsPrompt = (language: string) =>
   `Now write only the "## Next steps" section (heading in ${language || 'the same language'}): one bullet per thing someone will do after the meeting, as "- **Name:** what they will do, by when" (the when only if it was said), "You" for the person these notes are for, and plain words for who they are for someone without a name ("Them" is not a name). If nobody is to do anything, answer only NONE. Nothing else.`
 
 export type EnhanceInput = {
-  meeting: { title: string; attendees: Person[] }; mine: string; segments: Segment[]; language: string | null
+  signal?: AbortSignal
+  meeting: { title: string; attendees: Person[] }; mine: string; segments: Segment[]; language: string | null; note?: string
   /** a locale from Settings; a rewrite note may override it */
   summaryLanguage?: string
   /** the person who recorded it */
@@ -359,12 +376,13 @@ function oneMic(segments: Segment[]): boolean {
  * earlier: parts summarised while the meeting was recorded; those still matching the transcript are used as they are.
  */
 export async function enhance(input: EnhanceInput, llm: Llm, onToken: (text: string) => void, onPart?: (part: number, of: number) => void, earlier: PartSummary[] = []): Promise<string> {
+  input.signal?.throwIfAborted()
   const language = languageName(input.language)
   const summaryLanguage = LOCALES.find((l) => l.id === input.summaryLanguage)?.english
   let first = Infinity, last = -Infinity
   for (const s of input.segments) { first = Math.min(first, s.startMs); last = Math.max(last, s.endMs) }
   const minutes = input.segments.length ? (last - first) / 60_000 : undefined
-  const base = { title: input.meeting.title, attendees: input.meeting.attendees, mine: input.mine, language, summaryLanguage, minutes, me: input.me, spelling: input.words && spellingLine(input.words), oneMic: oneMic(input.segments) }
+  const base = { note: input.note, title: input.meeting.title, attendees: input.meeting.attendees, mine: input.mine, language, summaryLanguage, minutes, me: input.me, spelling: input.words && spellingLine(input.words), oneMic: oneMic(input.segments) }
   const segments = input.words ? input.segments.map((x) => ({ ...x, text: respell(x.text, input.words!) })) : input.segments
   let transcript = transcriptText(segments)
   let parts = false
@@ -373,10 +391,12 @@ export async function enhance(input: EnhanceInput, llm: Llm, onToken: (text: str
     const lines = transcript.split('\n')
     const done = round === 0 ? reusable(lines, earlier) : []
     const [overhead, ...lineTokens] = await llm.count([enhancePrompt({ ...base, transcript: '', parts }), ...lines])
+    input.signal?.throwIfAborted()
     const total = lineTokens.reduce((a, b) => a + b + 1, 0)
     // parts summarised during the meeting mean it was too long already: those are used even if it fits now
     if (!done.length && overhead + total + NOTES_TOKENS <= llm.contextSize) break
     const max = await partBudget(llm, language)
+    input.signal?.throwIfAborted()
     const from = done.reduce((n, p) => n + p.lines.length, 0)
     const rest = lineTokens.slice(from).reduce((a, b) => a + b + 1, 0)
     // even parts read better than one full part and a scrap
@@ -386,16 +406,19 @@ export async function enhance(input: EnhanceInput, llm: Llm, onToken: (text: str
     const pieces = from < lines.length ? splitForContext(lines.slice(from).join('\n'), target, count) : []
     const summaries = done.map((p) => p.summary)
     for (const piece of pieces) {
+      input.signal?.throwIfAborted()
       const n = summaries.length + 1
       onPart?.(n, done.length + pieces.length)
       summaries.push(tidyNotes(await llm.chat(summaryPrompt(piece, n, language), () => {}, { summary: true, maxTokens: SUMMARY_TOKENS })))
     }
+    input.signal?.throwIfAborted()
     transcript = summaries.map((s, i) => `Part ${i + 1}:\n${s}`).join('\n')
     parts = true
   }
 
   const prompt = enhancePrompt({ ...base, transcript, parts })
-  let md = tidyNotes(await llm.chat(prompt, onToken, { maxTokens: NOTES_TOKENS }))
+  let md = tidyNotes(await llm.chat(prompt, (text) => { if (!input.signal?.aborted) onToken(text) }, { maxTokens: NOTES_TOKENS }), !!input.note?.trim())
+  input.signal?.throwIfAborted()
   const written = md
   // the model sometimes stops before the next steps (it samples): ask for just that part, after what it wrote. Notes
   // with three sections or more and still none had none to give
@@ -403,16 +426,19 @@ export async function enhance(input: EnhanceInput, llm: Llm, onToken: (text: str
     // shown as it is written only once it starts like the section, so a chatty answer never flashes up
     let held = '', showing = false
     const show = (t: string) => {
+      if (input.signal?.aborted) return
       if (showing) { onToken(t); return }
       held += t
       if (held.trimStart().startsWith('#')) { showing = true; onToken(`\n${held.trimStart()}`) }
     }
-    const more = tidyNotes(await llm.chat(nextStepsPrompt(summaryLanguage ? 'the same language as the notes; write the bullets in that language too' : language), show, { maxTokens: 400, before: [prompt, md] }))
+    const more = tidyNotes(await llm.chat([nextStepsPrompt(summaryLanguage ? 'the same language as the notes; write the bullets in that language too' : language), ...rewriteInstruction(input.note), ...(input.note?.trim() ? ['If that instruction excludes next steps, answer only NONE.'] : [])].join('\n'), show, { maxTokens: 400, before: [prompt, md] }))
+    input.signal?.throwIfAborted()
     // only a real next-steps list is kept; anything else it said is dropped
     if (OWNER.test(more)) md = `${md}\n${more}`
   }
   // a title is nice to have: one that fails or comes out empty leaves the meeting's as it is
-  if (written) input.titleLater?.((model) => model.chat(titlePrompt(summaryLanguage ? '' : language, input.me, input.meeting.attendees), () => {}, { maxTokens: 40, before: [prompt, written], temperature: 0.3 })
+  if (written) input.titleLater?.((model) => model.chat([titlePrompt(summaryLanguage ? '' : language, input.me, input.meeting.attendees), ...(input.note?.trim() ? ['Use the language requested in this rewrite instruction for the title too; its other requests apply only to the notes:', JSON.stringify(input.note.slice(0, REWRITE_NOTE_MAX).trim())] : [])].join('\n'), () => {}, { maxTokens: 40, before: [prompt, written], temperature: 0.3 })
     .then((raw) => cleanTitle(raw, input.me), (e) => { console.error('a title from the notes failed', e); return '' }))
+  input.signal?.throwIfAborted()
   return markMine(withoutCopies(md, input.mine), input.mine)
 }

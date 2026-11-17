@@ -1,5 +1,5 @@
 {
-  "Link event": "Länka händelse",
+  "Other people": "Andra personer",
   "No events": "Inga händelser",
   "Go to {date}": "Gå till {date}",
   "Resume notes · {title}": "Fortsätt anteckna · {title}",
@@ -16,7 +16,6 @@
   "Open": "Öppna",
   "Next day": "Nästa dag",
   "Previous day": "Föregående dag",
-  "Link to a calendar event": "Länka till en kalenderhändelse",
   "Yogurt couldn't update the calendar link. Try again.": "Yogurt kunde inte uppdatera kopplingen till kalendern. Försök igen.",
   "Keep the title, attendees and notes.": "Behåll titel, deltagare och anteckningar.",
   "Unlink calendar event": "Koppla bort kalenderhändelse",
@@ -314,7 +313,6 @@
   "Recording {title}": "Spelar in {title}",
   "Redo": "Gör om",
   "Regenerate summary": "Skapa sammanfattningen igen",
-  "Regenerate summary?": "Skapa sammanfattningen igen?",
   "Reload": "Läs in igen",
   "Remove": "Ta bort",
   "Remove {name}": "Ta bort {name}",
@@ -381,7 +379,6 @@
   "Sum up the meeting so far": "Sammanfatta mötet hittills",
   "Summarizing…": "Sammanfattar…",
   "Summary": "Sammanfattning",
-  "Summary actions": "Åtgärder för sammanfattningen",
   "Sure. The site goes live on Tuesday.": "Visst. Sajten går live på tisdag.",
   "System Audio Recording Only": "Endast systemljudinspelning",
   "System Settings is open at {pane}.": "Systeminställningar är öppet vid {pane}.",
@@ -680,5 +677,14 @@
   "Dock only": "Endast Dock",
   "Summary language": "Sammanfattningsspråk",
   "Same as the meeting": "Samma som mötet",
-  "Used for new summaries and when you write them again.": "Används för nya sammanfattningar och när du skriver om dem."
+  "Used for new summaries and when you write them again.": "Används för nya sammanfattningar och när du skriver om dem.",
+  "Available after recording": "Tillgängligt efter inspelningen",
+  "Writing the summary": "Skriver sammanfattningen",
+  "Regenerate": "Skapa igen",
+  "Note for the summary": "Instruktion för sammanfattningen",
+  "Add a note, like shorter or in Spanish": "Lägg till en notering, som kortare eller på spanska",
+  "Waiting for Yogurt AI to download": "Väntar på nedladdning av Yogurt AI",
+  "Stop summary": "Stoppa sammanfattning",
+  "Summary stopped.": "Sammanfattningen stoppades.",
+  "This window couldn't be displayed.": "Det här fönstret kunde inte visas."
 }

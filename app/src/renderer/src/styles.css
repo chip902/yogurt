@@ -16,6 +16,11 @@
   --ease-out: cubic-bezier(.23,1,.32,1);
   --ease-in-out: cubic-bezier(.77,0,.175,1);
   --ease-soft: cubic-bezier(.23,1.15,.32,1);
+  --dur-player-duck: 160ms;
+  --dur-player-return: 360ms;
+  --ease-player-duck: linear(0, 0.00391, 0.01563, 0.03516, 0.0625, 0.09766, 0.14063, 0.19141, 0.25, 0.31641, 0.39063, 0.47266, 0.5625, 0.66016, 0.76563, 0.87891, 1);
+  /* Spring samples every 10ms: stiffness 640, damping 32, mass 1. */
+  --ease-player-return: linear(0, 0.02869, 0.10244, 0.2049, 0.32261, 0.44499, 0.56409, 0.67433, 0.77212, 0.85554, 0.92399, 0.97783, 1.01814, 1.04642, 1.06443, 1.07399, 1.07691, 1.07484, 1.06925, 1.06143, 1.0524, 1.04299, 1.03381, 1.0253, 1.01775, 1.0113, 1.006, 1.00182, 0.99869, 0.99649, 0.99508, 0.99432, 0.99409, 0.99423, 0.99466, 1, 1);
   --bg: #FFFFFF;
   --card: #F6F6F8;
   --ink: #23242A;
@@ -225,9 +230,16 @@ html.widget { --pill:#232326;--pill-ink:#F7F7FA;--accent:#B780FF;--pill-accent:v
 @media (prefers-reduced-motion: reduce) { .widget-btn { transition: none; } }
 
 /* ---- the note screen ---- */
-.note-summary-actions { align-self:center;margin-inline-start:auto; }
-.note-view-menu { display:grid;place-items:center;width:28px;height:28px;border-radius:4px;color:var(--muted); }
-.note-view-menu:hover,.note-view-menu[aria-expanded=true] { background:var(--control-hover);color:var(--ink); }
+/* The rewrite stays anchored to the note menu, leaving the reading surface still. */
+.summary-regenerate { position:absolute;inset-inline-end:0;top:calc(100% + 8px);z-index:40;width:420px;max-width:calc(100vw - 32px);padding:14px;overflow:hidden;border:1px solid var(--line);border-radius:9px;background:var(--float);box-shadow:var(--shadow); }
+.summary-regenerate-heading { display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;font-size:12px;line-height:20px;font-weight:500;white-space:nowrap; }
+.summary-regenerate-heading button { display:grid;place-items:center;width:22px;height:22px;border-radius:4px;color:var(--muted); }
+.summary-regenerate-input { width:100%;height:36px;border:1px solid var(--control-border);border-radius:6px;background:var(--control);padding:0 10px;font-size:12px;color:var(--ink); }
+.main-window .summary-regenerate-input:focus-visible { outline:2px solid var(--muted);outline-offset:2px; }
+.summary-regenerate-input::placeholder { color:var(--muted); }
+.summary-regenerate-warning { margin-top:10px;font-size:12px;line-height:20px;color:var(--muted);white-space:nowrap; }
+.summary-regenerate-actions { display:flex;justify-content:flex-end;margin-top:12px; }
+.summary-regenerate-actions button { white-space:nowrap;font-size:12px; }
 .note-chip, .note-record-action { height:32px; }
 .note-chip, .share-btn, .person-remove { transition: background-color var(--dur-micro) ease, color var(--dur-micro) ease, opacity var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) ease; }
 .note-chip:hover, .note-chip[aria-expanded="true"] { background:var(--control-hover);color:var(--ink); }
@@ -601,7 +613,6 @@ input::selection, textarea::selection, .note-prose ::selection { background: var
 .chat-panel-contents { position:relative;display:flex;flex-direction:column;flex:1;min-height:0;min-width:0; }
 .chat-trigger[aria-expanded=true] { opacity:0; }
 .note-resume-action { min-width:160px; }
-.note-recording-group .note-record-action[data-processing=true] { cursor:wait; }
 [data-icon] { flex:none; }
 [data-icon=Loader] { animation:icon-spin 1s linear infinite; }
 [data-icon] path { transform-box:fill-box;transform-origin:center; }
@@ -695,12 +706,17 @@ input::selection, textarea::selection, .note-prose ::selection { background: var
 /* The transcript continues behind the player; its last line can scroll clear of the controls. */
 [data-testid="transcript-panel"].transcript-inline { position:relative;display:flex;flex:1;flex-direction:column;min-height:0;height:auto;width:100%;border:0;border-radius:0;background:transparent;box-shadow:none; }
 .transcript-inline>.transcript-toolbar { padding-block:4px 8px;padding-inline:0;border:0; }
-.transcript-inline [data-testid="transcript"] { padding-inline:var(--transcript-inset);padding-top:22px;padding-bottom:max(16px,var(--playback-inset));scroll-padding-bottom:var(--playback-inset); }
-.transcript-inline .transcript-player-dock { position:absolute;inset-inline:var(--transcript-inset);bottom:4px;z-index:1; }
-.transcript-inline [data-testid="player"] { margin:0;background:color-mix(in srgb,var(--float) 88%,transparent);backdrop-filter:blur(12px);box-shadow:0 2px 12px #0000000D; }
-.transcript-inline [data-testid="transcript-follow"] { bottom:calc(var(--playback-inset) + 8px); }
+.transcript-inline [data-testid="transcript"] { padding-inline:var(--transcript-inset);padding-top:22px; }
+[data-testid="transcript-panel"] [data-testid="transcript"] { padding-bottom:max(16px,var(--playback-inset));scroll-padding-bottom:var(--playback-inset); }
+.transcript-player-dock { position:absolute;inset-inline:max(16px, calc((100% - 412px)/2));bottom:12px;z-index:1;clip-path:inset(-16px -16px -12px); }
+.transcript-player { padding:5px 8px;border:1px solid var(--line);border-radius:22px;background:color-mix(in srgb,var(--float) 96%,transparent);backdrop-filter:blur(12px);box-shadow:0 2px 8px #0000000D;opacity:1;transform:translateY(0);transition:opacity var(--dur-micro) var(--ease-out),transform var(--dur-player-return) var(--ease-player-return); }
+.transcript-player-dock[data-hidden=true] .transcript-player { opacity:0;transform:translateY(calc(100% + 12px));pointer-events:none;transition:transform var(--dur-player-duck) var(--ease-player-duck),opacity calc(var(--dur-player-duck)/4) linear calc(var(--dur-player-duck)*.75); }
+@media (prefers-reduced-motion: reduce) {
+  .transcript-player,.transcript-player-dock[data-hidden=true] .transcript-player { transform:none;transition:opacity var(--dur-micro) var(--ease-out); }
+}
+[data-testid="transcript-panel"] [data-testid="transcript-follow"] { bottom:calc(var(--playback-inset) + 8px); }
 @media (prefers-reduced-transparency:reduce),(prefers-contrast:more) {
-  .transcript-inline [data-testid="player"] { background:var(--float);backdrop-filter:none; }
+  .transcript-player { background:var(--float);backdrop-filter:none; }
 }
 
 html:not(.widget) .bg-accent { background-color:var(--primary); }
@@ -743,6 +759,12 @@ html:not(.widget) button:focus-visible, html:not(.widget) input:focus-visible { 
 .people-card { display:flex;flex-direction:column;max-height:var(--people-available-height,calc(100dvh - 200px));overflow-y:auto;overscroll-behavior:contain; }
 .people-card > * { flex-shrink:0; }
 .people-card .people-list { flex-shrink:1;min-height:40px;overscroll-behavior:contain; }
+.grouped-people { max-height:386px; }
+.grouped-people section+section { margin-top:6px; }
+.company-heading { font-size:11px;line-height:16px;font-weight:500;color:var(--muted);padding:8px 10px 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.grouped-people .person-row { gap:9px; }
+.person-initials { display:grid;place-items:center;width:28px;height:28px;flex:none;border-radius:50%;background:var(--control);font-size:10px;font-weight:500;color:var(--muted); }
+
 
 /* Name ink comes from the same folder token in both transcript surfaces. */
 :is(.line-who,.widget-preview-speaker)[data-folder-color] { color:var(--folder-ink); }
@@ -755,26 +777,45 @@ html:not(.widget) button:focus-visible, html:not(.widget) input:focus-visible { 
 @media (prefers-reduced-motion:reduce) { .note-date-card { --note-date-ms:0ms; } }
 .note-date-card .agenda-inspector-heading h3 { flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
 .note-date-linked { display:flex;flex-direction:column; }
-.note-date-picker-space { padding-top:8px; }
-.note-date-motion,.note-date-motion[data-open=true] { transition:grid-template-rows var(--note-date-ms) var(--note-date-ease),margin-top var(--note-date-ms) var(--note-date-ease); }
+.note-date-picker-space { padding-top:0; }
+.note-date-linked .note-date-picker-motion { margin-inline:-8px; }
+.note-date-linked .note-date-picker-motion[data-open=true] { margin-top:12px; }
+/* the open Unlink row sits as close to the bottom edge as the event row sits to the top (both pull their hover box into the padding) */
+.note-date-linked:last-child .note-date-picker-motion[data-open=true] { margin-bottom:-8px; }
+.note-date-motion,.note-date-motion[data-open=true] { transition:grid-template-rows var(--note-date-ms) var(--note-date-ease),margin-top var(--note-date-ms) var(--note-date-ease),margin-bottom var(--note-date-ms) var(--note-date-ease); }
 .note-date-motion>* { transition:opacity var(--note-date-ms) var(--note-date-ease),visibility 0s var(--note-date-ms); }
 .note-date-motion[data-open=true]>* { transition:opacity var(--note-date-ms) var(--note-date-ease),visibility 0s; }
 /* Cancel the parent's row gap as the compact switcher replaces the details. */
 .note-date-details-motion[data-open=false] { margin-top:-16px; }
-.note-date-linked .note-date-picker { border:1px solid var(--line);border-radius:6px;padding:4px;background:var(--card); }
+.note-date-linked .note-date-link { gap:6px; }
 .note-date-details { display:flex;flex-direction:column;gap:16px; }
-.note-date-empty-row { display:flex;align-items:center;justify-content:space-between;gap:8px;white-space:nowrap; }
-.note-date-empty-row>p { min-width:0;overflow:hidden;text-overflow:ellipsis; }
 .note-date-event-toggle[aria-expanded=true]>svg { transform:rotate(180deg); }
-.note-date-event-toggle { display:flex;align-items:center;gap:8px;width:100%;text-align:start;border-radius:4px; }
-.note-date-event-toggle>span { white-space:nowrap;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis; }
-/* centred under the day arrow above it: that 28px button hangs 4px past the edge, so its 15px icon sits 2.5px further in */
-.note-date-event-toggle>svg { flex:none;margin-inline-end:2.5px;color:var(--muted);transition:transform var(--note-date-ms) var(--note-date-ease); }
+.note-date-event-toggle { display:flex;align-items:flex-start;gap:10px;width:calc(100% + 16px);margin:-8px;padding:8px;border-radius:6px;text-align:start; }
+.note-date-color { width:10px;height:10px;border-radius:3px;flex:none;margin-top:5px; }
+/* Keep late linked-event data in its reserved space instead of resizing the card. */
+.note-date-actions { min-height:28px; }
+.note-date-actions .note-date-access { flex-wrap:nowrap; }
+.note-date-actions p { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.note-date-reveal { opacity:1;transition:opacity var(--dur-micro) var(--ease-out); }
+.note-date-reveal[data-ready=false] { opacity:0; }
+@media (prefers-reduced-motion:reduce) { .note-date-reveal { transition:none; } }
+
+.note-date-identity { min-width:0;flex:1; }
+.note-date-identity>strong,.note-date-time,.note-date-calendar { display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.note-date-identity>strong { font-size:14px;font-weight:600;line-height:21px; }
+.note-date-time { font-size:12px;line-height:18px;color:var(--written);margin-top:3px; }
+.note-date-calendar { min-height:16px;font-size:11px;line-height:16px;color:var(--muted);margin-top:3px; }
+.note-date-event-toggle>svg { flex:none;margin-top:3px;color:var(--muted);transition:transform var(--note-date-ms) var(--note-date-ease); }
+.note-date-linked :is(.note-date-event-toggle,.note-date-link):hover:not(:disabled) { background:var(--row-hover); }
+.note-date-linked :is(.note-date-event-toggle,.note-date-link):active:not(:disabled) { background:var(--control-pressed); }
+.note-date-linked :is(.note-date-event-toggle,.note-date-link):focus-visible { outline:2px solid var(--focus);outline-offset:-2px; }
 @media (prefers-reduced-motion:reduce) { .note-date-motion,.note-date-motion[data-open=true],.note-date-motion>*,.note-date-motion[data-open=true]>*,.note-date-event-toggle>svg { transition:none; } }
 .note-date-link { display:flex;align-items:center;gap:8px;width:100%;padding:8px;border-radius:6px;text-align:start;font-size:12px;color:var(--muted); }
 .note-date-link:hover,.note-date-event:hover { background:var(--card);color:var(--ink); }
 .note-date-card .note-date-picker button:focus-visible { outline-offset:-2px; }
-.note-date-link small { display:block;margin-top:3px;font-size:11px; }
+.note-date-link>span { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.note-date-link>svg { flex:none; }
+.note-date-link small { display:block;margin-top:3px;font-size:11px;overflow:hidden;text-overflow:ellipsis; }
 .note-date-events { max-height:240px;overflow-y:auto;overscroll-behavior:contain; }
 .note-date-events>p { padding:12px 8px;font-size:12px;color:var(--muted); }
 .note-date-event { display:flex;align-items:center;gap:8px;width:100%;padding:8px;border-radius:6px;text-align:start; }
@@ -870,18 +911,33 @@ html:not(.widget) button:focus-visible, html:not(.widget) input:focus-visible { 
   @starting-style { .search-panel.dialog-motion { transform:none; } }
 }
 
-/* The first chunk warms up out of view while the old reading surface fades. */
+/* Keep the same editor through the fade; reset its scroll only while hidden. */
 .summary-rewrite { position:relative; }
 .summary-rewrite[data-rewriting=true]>.summary-result { opacity:.45;user-select:none;pointer-events:none; }
-.summary-previous { pointer-events:none;animation:summary-rewrite-out var(--dur-micro) var(--ease-out) reverse both; }
-.summary-rewrite[data-handoff=true]>.summary-result { position:absolute;inset:0;visibility:hidden;animation:summary-handoff-in 0s var(--dur-micro) forwards; }
-@keyframes summary-rewrite-out { from { opacity:0; } to { opacity:.45; } }
-@keyframes summary-handoff-in { to { visibility:visible; } }
-@media (prefers-reduced-motion: reduce) {
-  .summary-previous { display:none; }
-  .summary-rewrite[data-handoff=true]>.summary-result { position:static;visibility:visible;animation:none; }
+.summary-rewrite[data-handoff=true]>.summary-result { animation:summary-rewrite-out var(--dur-micro) var(--ease-out) both;pointer-events:none; }
+.summary-rewrite[data-resetting=true] { visibility:hidden; }
+@keyframes summary-rewrite-out { from { opacity:1; } to { opacity:0; } }
+@media (prefers-reduced-motion:no-preference) {
+  .summary-rewrite:is([data-rewriting=true],[data-handoff=true])>.summary-result { opacity:1; }
+  .summary-rewrite:is([data-rewriting=true],[data-handoff=true]) .note-prose {
+    background:linear-gradient(100deg,color-mix(in srgb,var(--written) 45%,transparent) 38%,color-mix(in srgb,var(--ink) 90%,transparent) 50%,color-mix(in srgb,var(--written) 45%,transparent) 62%) 0 0 / 250% 100%;
+    -webkit-background-clip:text;background-clip:text;color:transparent;animation:step-shimmer 2.8s linear infinite;
+  }
+  .summary-rewrite:is([data-rewriting=true],[data-handoff=true]) .note-prose :is(h1,h2,h3,p,li,strong,a,em) { color:transparent; }
+  .summary-rewrite:is([data-rewriting=true],[data-handoff=true]) .note-prose li::marker { color:color-mix(in srgb,var(--ink) 31.5%,transparent); }
 }
+.summary-stop-icon { display:inline-grid;place-items:center;width:14px;height:14px; }
+.summary-stop-icon>* { grid-area:1/1;transition:opacity var(--dur-base) var(--ease-out); }
+.summary-stop-square { width:10px;height:10px;border-radius:2px;background:currentColor;opacity:0; }
+.note-resume-action[data-processing=true] { color:var(--muted);cursor:pointer; }
+.note-resume-action[data-processing=true]:hover { background:var(--float); }
+.note-resume-action:is(:hover,:focus-visible) .summary-stop-icon>svg { opacity:0; }
+.note-resume-action:is(:hover,:focus-visible) .summary-stop-square { opacity:1; }
+.summary-stopped { display:flex;flex-direction:column;align-items:flex-start;gap:8px;color:var(--muted);font-size:13px; }
+@media (prefers-reduced-motion:reduce) { .summary-stop-icon>* { transition:none; } }
 
-/* the summary's status line shimmers like Ask's thinking line */
-.summary-status-text { background:linear-gradient(100deg,var(--muted) 35%,var(--ink) 50%,var(--muted) 65%) 0 0 / 250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:step-shimmer 2.2s linear infinite; }
-@media (prefers-reduced-motion: reduce) { .summary-status-text { animation:none;background:none;color:inherit; } }
+/* Recovery remains opaque even when the rest of the React tree has been removed. */
+.renderer-recovery { position:relative;display:grid;place-items:center;height:100%;padding:72px 24px 24px;background:var(--bg);color:var(--ink); }
+.renderer-recovery-titlebar { position:absolute;inset:0 0 auto;height:52px; }
+.renderer-recovery-content { display:flex;flex-direction:column;align-items:center;gap:16px;max-width:360px;text-align:center;font-size:14px; }
+.renderer-recovery-content .modal-button { width:auto;min-width:80px; }

@@ -1,5 +1,5 @@
 {
-  "Link event": "Afspraak koppelen",
+  "Other people": "Andere personen",
   "No events": "Geen afspraken",
   "Go to {date}": "Ga naar {date}",
   "Resume notes · {title}": "Notities hervatten · {title}",
@@ -16,7 +16,6 @@
   "Open": "Openen",
   "Next day": "Volgende dag",
   "Previous day": "Vorige dag",
-  "Link to a calendar event": "Koppelen aan een agenda-afspraak",
   "Yogurt couldn't update the calendar link. Try again.": "Yogurt kon de koppeling met de agenda niet bijwerken. Probeer het opnieuw.",
   "Keep the title, attendees and notes.": "Titel, deelnemers en notities behouden.",
   "Unlink calendar event": "Agenda-item ontkoppelen",
@@ -314,7 +313,6 @@
   "Recording {title}": "{title} wordt opgenomen",
   "Redo": "Opnieuw",
   "Regenerate summary": "Samenvatting opnieuw maken",
-  "Regenerate summary?": "Samenvatting opnieuw maken?",
   "Reload": "Laad opnieuw",
   "Remove": "Verwijderen",
   "Remove {name}": "{name} verwijderen",
@@ -381,7 +379,6 @@
   "Sum up the meeting so far": "Vat de meeting tot nu toe samen",
   "Summarizing…": "Samenvatten…",
   "Summary": "Samenvatting",
-  "Summary actions": "Acties voor samenvatting",
   "Sure. The site goes live on Tuesday.": "Zeker. De site gaat dinsdag live.",
   "System Audio Recording Only": "Alleen systeemaudio-opname",
   "System Settings is open at {pane}.": "Systeeminstellingen is geopend bij {pane}.",
@@ -680,5 +677,14 @@
   "Dock only": "Alleen Dock",
   "Summary language": "Taal van samenvattingen",
   "Same as the meeting": "Dezelfde als de vergadering",
-  "Used for new summaries and when you write them again.": "Voor nieuwe samenvattingen en wanneer je ze opnieuw schrijft."
+  "Used for new summaries and when you write them again.": "Voor nieuwe samenvattingen en wanneer je ze opnieuw schrijft.",
+  "Available after recording": "Beschikbaar na de opname",
+  "Writing the summary": "Samenvatting wordt geschreven",
+  "Regenerate": "Opnieuw maken",
+  "Note for the summary": "Instructie voor de samenvatting",
+  "Add a note, like shorter or in Spanish": "Voeg iets toe, zoals korter of in het Spaans",
+  "Waiting for Yogurt AI to download": "Wachten op de download van Yogurt AI",
+  "Stop summary": "Samenvatting stoppen",
+  "Summary stopped.": "Samenvatting gestopt.",
+  "This window couldn't be displayed.": "Dit venster kon niet worden weergegeven."
 }

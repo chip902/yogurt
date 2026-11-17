@@ -1,5 +1,5 @@
 {
-  "Link event": "Σύνδεση συμβάντος",
+  "Other people": "Άλλα άτομα",
   "No events": "Κανένα συμβάν",
   "Go to {date}": "Μετάβαση στις {date}",
   "Resume notes · {title}": "Συνέχιση σημειώσεων · {title}",
@@ -16,7 +16,6 @@
   "Open": "Άνοιγμα",
   "Next day": "Επόμενη ημέρα",
   "Previous day": "Προηγούμενη ημέρα",
-  "Link to a calendar event": "Σύνδεση με συμβάν ημερολογίου",
   "Yogurt couldn't update the calendar link. Try again.": "Το Yogurt δεν μπόρεσε να ενημερώσει τη σύνδεση με το ημερολόγιο. Δοκιμάστε ξανά.",
   "Keep the title, attendees and notes.": "Διατήρηση τίτλου, συμμετεχόντων και σημειώσεων.",
   "Unlink calendar event": "Αποσύνδεση συμβάντος ημερολογίου",
@@ -314,7 +313,6 @@
   "Recording {title}": "Ηχογράφηση {title}",
   "Redo": "Επανάληψη",
   "Regenerate summary": "Νέα δημιουργία σύνοψης",
-  "Regenerate summary?": "Νέα δημιουργία σύνοψης;",
   "Reload": "Επαναφόρτωση",
   "Remove": "Αφαίρεση",
   "Remove {name}": "Αφαίρεση {name}",
@@ -381,7 +379,6 @@
   "Sum up the meeting so far": "Συνόψισε τη σύσκεψη ως τώρα",
   "Summarizing…": "Δημιουργία σύνοψης…",
   "Summary": "Σύνοψη",
-  "Summary actions": "Ενέργειες σύνοψης",
   "Sure. The site goes live on Tuesday.": "Βεβαίως. Ο ιστότοπος βγαίνει την Τρίτη.",
   "System Audio Recording Only": "Μόνο εγγραφή ήχου συστήματος",
   "System Settings is open at {pane}.": "Οι Ρυθμίσεις συστήματος είναι ανοιχτές στο {pane}.",
@@ -683,5 +680,14 @@
   "Dock only": "Μόνο Dock",
   "Summary language": "Γλώσσα σύνοψης",
   "Same as the meeting": "Ίδια με τη συνάντηση",
-  "Used for new summaries and when you write them again.": "Χρησιμοποιείται για νέες συνόψεις και όταν τις ξαναγράφετε."
+  "Used for new summaries and when you write them again.": "Χρησιμοποιείται για νέες συνόψεις και όταν τις ξαναγράφετε.",
+  "Available after recording": "Διαθέσιμο μετά την εγγραφή",
+  "Writing the summary": "Γράφεται η σύνοψη",
+  "Regenerate": "Νέα δημιουργία",
+  "Note for the summary": "Οδηγία για τη σύνοψη",
+  "Add a note, like shorter or in Spanish": "Προσθέστε οδηγία, π.χ. πιο σύντομα ή στα ισπανικά",
+  "Waiting for Yogurt AI to download": "Αναμονή λήψης του Yogurt AI",
+  "Stop summary": "Διακοπή σύνοψης",
+  "Summary stopped.": "Η σύνοψη διακόπηκε.",
+  "This window couldn't be displayed.": "Δεν ήταν δυνατή η εμφάνιση αυτού του παραθύρου."
 }

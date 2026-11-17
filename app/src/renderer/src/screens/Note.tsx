@@ -8,7 +8,7 @@ import { motion, useReducedMotion } from '../motion'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useScrollMemory } from '../useScrollMemory'
 import { AudioLines, Lock, RotateCcw, Trash2, TextAlignStart, TriangleAlert } from 'lucide-react'
-import type { MeetingView, NoteSaveResult, NoteSide, NoteView, WidgetView } from '../../../shared/types'
+import type { MeetingView, NoteSaveResult, NoteSide, NoteView, SetupState, WidgetView } from '../../../shared/types'
 import { t } from '../../../shared/i18n'
 import { osWords } from '../keys'
 import { Modal, ModalClose } from '../components/Modal'
@@ -22,7 +22,7 @@ import { LevelBars } from '../components/LevelBars'
 import { RecordingTime } from '../components/RecordingTime'
 import { Mic, Pause, Play, Sparkles, Loader } from '../components/Icons'
 import { ShareMenu } from '../components/ShareMenu'
-import { NoteMenu } from '../components/NoteMenu'
+import { NoteMenu, summaryAction } from '../components/NoteMenu'
 import { DeleteNote } from '../components/DeleteNote'
 import { moveToTrash } from '../components/TrashToast'
 import { useSummaryPresentation } from '../summaryPresentation'
@@ -30,7 +30,6 @@ import { useSmoothText } from '../useSmoothText'
 import { NoteAutosave, registerAutosave } from '../noteAutosave'
 import { People } from '../components/People'
 import { NoteDate } from '../components/NoteDate'
-import { SummaryActions } from '../components/ViewPill'
 import { MicMenu } from '../components/MicMenu'
 import { SpokenMenu } from '../components/SpokenMenu'
 import { RecordingHint } from '../components/RecordingHint'
@@ -83,6 +82,28 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
   const [pausing, setPausing] = useState(false)
   const [pauseFailed, setPauseFailed] = useState<'pause' | 'resume' | null>(null)
   const [notes, setNotes] = useState<NoteView>()
+  const [hasTranscript, setHasTranscript] = useState(false)
+  const [setup, setSetup] = useState<SetupState>()
+  useEffect(() => {
+    let active = true, revision = 0
+    setHasTranscript(false)
+    const load = () => {
+      const request = ++revision
+      void window.yogurt.transcript.get(id, { last: 1 }).then(lines => {
+        if (active && request === revision) setHasTranscript(lines.some(line => !!line.text.trim()))
+      })
+    }
+    const off = window.yogurt.transcript.onSegment(line => { if (line.meetingId === id && line.text.trim()) { revision++; setHasTranscript(true) } })
+    const changed = window.yogurt.transcript.onSpeakers(meetingId => { if (meetingId === id) load() })
+    load()
+    return () => { active = false; off(); changed() }
+  }, [id])
+  useEffect(() => {
+    let active = true, received = false
+    const off = window.yogurt.setup.onState(state => { received = true; setSetup(state) })
+    void window.yogurt.setup.state().then(state => { if (active && !received) setSetup(state) })
+    return () => { active = false; off() }
+  }, [])
   const [viewState, setView] = useState<'mine' | 'enhanced'>(() => readingViews.get(id)?.view ?? 'mine')
   const [finishRequested, requestFinish] = useState(false)
   const reducedMotion = useReducedMotion()
@@ -109,8 +130,7 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
   const transcriptButton = useRef<HTMLButtonElement>(null)
   const notesButton = useRef<HTMLButtonElement>(null)
   const summaryButton = useRef<HTMLButtonElement>(null)
-  const [confirming, setConfirming] = useState(false)
-  const rewriteButton = useRef<HTMLButtonElement>(null)
+  const [rewriteOpen, setRewriteOpen] = useState(false)
   const [editedHere, setEditedHere] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -161,7 +181,7 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
 
   useEffect(() => {
     requestFinish(false)
-    setTabPointer(false); setNotes(undefined); current.current = undefined; setView(readingViews.get(id)?.view ?? 'mine'); picked.current = readingViews.has(id); typing.current = false; setEditedHere(false); setConfirming(false); setRenaming(false); setDeleting(false); setResumeConfirm(false); setResumeFailed(false)
+    setTabPointer(false); setNotes(undefined); current.current = undefined; setView(readingViews.get(id)?.view ?? 'mine'); picked.current = readingViews.has(id); typing.current = false; setEditedHere(false); setRewriteOpen(false); setRenaming(false); setDeleting(false); setResumeConfirm(false); setResumeFailed(false)
     const show = (v: NoteView) => {
       const first = !current.current
       // what they typed here is newer than any copy from the app; notes written again for new people replace it unless edited (noteMerge.ts)
@@ -237,7 +257,7 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
     setTabPointer(pointer)
     if (next === primaryState) return
     setPrimary(next)
-    if (next === 'transcript') setConfirming(false)
+    if (next === 'transcript') setRewriteOpen(false)
     void mineSave.flush(); void enhancedSave.flush()
   }
   const pickTab = (next: 'transcript' | 'notes', side?: 'mine' | 'enhanced', pointer = false) => {
@@ -295,16 +315,17 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
   }
   const saveStatus = mineSave.status === 'failed' || enhancedSave.status === 'failed' ? 'failed'
     : mineSave.status === 'saving' || enhancedSave.status === 'saving' ? 'saving' : 'saved'
-  const dismissRewrite = () => { setConfirming(false); rewriteButton.current?.focus({ preventScroll: true }) }
-  const writeAgain = async () => {
-    const confirmed = confirming
-    // Confirm is a completed choice; do not offer a Cancel UI while its save is still pending.
-    if (confirmed) dismissRewrite()
+  const writeAgain = async (note?: string) => {
     if (!await saveAll()) return
-    if ((notes.edited || editedHere) && !confirmed) { setConfirming(true); return }
-    if (!confirmed) dismissRewrite()
     setEditedHere(false)
-    void window.yogurt.notes.writeAgain(id)
+    void window.yogurt.notes.writeAgain(id, note)
+  }
+  const hasSummary = !!notes.enhanced?.trim()
+  const generation = summaryAction({ hasSummary, hasContent: hasTranscript || !!notes.mine.trim(), recording, busy: summarizing, downloading: !!(setup?.notesDownloading || setup?.notesError), trashed })
+  const requestRewrite = () => {
+    if (!generation || generation.reason) return
+    if (hasSummary) setRewriteOpen(true)
+    else void writeAgain()
   }
 
   return (
@@ -317,8 +338,9 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
           <ModalClose data-dialog-cancel data-testid="resume-cancel" className="modal-button">{t('Cancel')}</ModalClose>
         </div>
       </Modal>}
-      <div data-testid="note-topbar" className="note-topbar no-drag fixed right-4 top-[10px] z-[60]">
-          <NoteMenu recording={recording} savePending={m.stopSavePending} trashed={trashed} onRename={() => setRenaming(true)} onDelete={() => { void saveAll().then((saved) => { if (!saved) return; if (trashed) setDeleting(true); else void moveToTrash(id, `/note/${id}`) }) }}
+      <div data-testid="note-topbar" className="note-topbar no-drag fixed end-4 top-[10px] z-[60]">
+          <NoteMenu key={id} generation={generation} hasSummary={hasSummary} edited={notes.edited || editedHere} rewriteOpen={rewriteOpen} setRewriteOpen={setRewriteOpen}
+            onWriteAgain={(note) => { if (!generation || generation.reason) return; pickPrimary('notes'); pick('enhanced'); void writeAgain(note) }} recording={recording} savePending={m.stopSavePending} trashed={trashed} onRename={() => setRenaming(true)} onDelete={() => { void saveAll().then((saved) => { if (!saved) return; if (trashed) setDeleting(true); else void moveToTrash(id, `/note/${id}`) }) }}
             folders={(close) => <FolderPicker testId="note-menu-folders" meetingId={id} onNew={() => { close(); setNamingFolder(true) }} />} />
       </div>
       <div className="note-layout relative flex min-w-0 flex-1 flex-col" data-tab-pointer={tabPointer}>
@@ -346,9 +368,9 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
                   </button>
                 </>}
                 {finishing && <span data-testid="note-finishing" role="status" className="note-finishing">{t('Finishing…')}</span>}
-                {!finishing && (m.state === 'stopped' || m.state === 'done') && !m.stopSavePending && !trashed && <button data-testid="note-resume" disabled={starting || summarizing} aria-busy={summarizing} data-processing={summarizing} onClick={() => void resumeRecording()}
-                  className="note-record-action note-resume-action" title={summarizing ? t('Summarizing…') : t('Resume recording in this note')}>
-                  <Swap show={summarizing ? 'busy' : 'mic'} options={{ mic: <Mic size={14} />, busy: <Loader size={14} /> }} />
+                {!finishing && (m.state === 'stopped' || m.state === 'done') && !m.stopSavePending && !trashed && <button data-testid="note-resume" disabled={starting} aria-busy={summarizing} data-processing={summarizing} onClick={() => { if (summarizing) void window.yogurt.notes.stop(id).catch(console.error); else void resumeRecording() }}
+                  aria-label={summarizing ? t('Stop summary') : t('Resume recording')} className="note-record-action note-resume-action" title={summarizing ? t('Stop summary') : t('Resume recording in this note')}>
+                  <Swap show={summarizing ? 'busy' : 'mic'} options={{ mic: <Mic size={14} />, busy: <span className="summary-stop-icon"><Loader size={14} /><span className="summary-stop-square" /></span> }} />
                   <SwapText text={summarizing ? t('Summarizing…') : starting ? t('Preparing…') : t('Resume recording')} widest={t('Resume recording')} />
                 </button>}
                 {m.state === 'prepared' && !trashed && <button data-testid="note-start" disabled={starting} onClick={() => { void startPrepared() }} className="note-record-action primary">
@@ -385,17 +407,16 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
             </div>
             {primary === 'transcript' && <div ref={setTranscriptToolbar} className="note-primary-tools" />}
             <span data-testid="note-tab-indicator" className="note-tab-indicator" aria-hidden="true" />
-            {hasEnhanced && primary === 'notes' && <SummaryActions menuButton={rewriteButton} hasSummary={notes.enhanced != null} canWriteAgain={notes.status === 'done' || notes.status === 'failed' || notes.status === 'empty'} onWriteAgain={() => { pick('enhanced'); writeAgain() }} />}
           </div>
         </header>
         <div ref={setChatAnchor} className="note-reading-area">
           <div ref={panels} className="note-panels">
-          <NoteReadingPane active={primary === 'notes'} summary={shown === 'enhanced'} hasSummary={notes.enhanced != null} generating={shown === 'enhanced' && ['waiting', 'streaming'].includes(summaryState)} writing={shown === 'enhanced' && summaryState === 'streaming'} scroll={readingScroll}>
+          <NoteReadingPane active={primary === 'notes'} summary={shown === 'enhanced'} generating={shown === 'enhanced' && ['waiting', 'rewriting', 'handoff', 'reset', 'streaming'].includes(summaryState)} resetting={shown === 'enhanced' && summaryState === 'reset'} writing={shown === 'enhanced' && summaryState === 'streaming'} scroll={readingScroll}>
                 {shown === 'mine' ? <Editor
                   focus={primary === 'notes' && at?.ms === null ? at : undefined} testId="note-mine" label={t('My notes')} className="min-h-[40vh]" markdown={notes.mine} placeholder={t('You can add notes here to guide the summary.')}
                   onChange={(md) => { typing.current = true; const next = { ...current.current!, mine: md }; current.current = next; setNotes(next); mineSave.change(md) }}
                   onBlur={() => { typing.current = false; mineSave.flush() }}
-                /> : <Enhanced key={id} presentation={summaryState} focus={primary === 'notes' && at?.ms === null ? at : undefined} notes={notes} disabled={starting} onChange={(md) => { setEditedHere(true); const next = { ...current.current!, enhanced: md }; current.current = next; setNotes(next); enhancedSave.change(md) }} onBlur={enhancedSave.flush} onRetry={writeAgain} />}
+                /> : <Enhanced key={id} presentation={summaryState} focus={primary === 'notes' && at?.ms === null ? at : undefined} notes={notes} disabled={starting} onChange={(md) => { setEditedHere(true); const next = { ...current.current!, enhanced: md }; current.current = next; setNotes(next); enhancedSave.change(md) }} onBlur={enhancedSave.flush} onRetry={requestRewrite} />}
           </NoteReadingPane>
           {(primary === 'transcript' || transcriptVisited) && <section hidden={primary !== 'transcript'} id="note-transcript-panel" role="tabpanel" aria-labelledby="note-transcript-tab" className="note-content note-transcript-pane">
             <Transcript id={id} recording={recording} active={primary === 'transcript'} inline toolbar={transcriptToolbar} focus={at?.ms != null ? { ...at, ms: at.ms } : undefined} />
@@ -415,19 +436,10 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
                 }}>{retryingStop ? t('Saving…') : t('Try again')}</button>
               </div>
             )}
-          {primary === 'notes' && shown === 'enhanced' && notes.status === 'done' && notes.peopleChanged && !confirming && (
+          {primary === 'notes' && shown === 'enhanced' && notes.status === 'done' && notes.peopleChanged && !rewriteOpen && (
             <div data-testid="note-people-changed" className="pointer-events-auto mx-auto mt-3 flex w-fit max-w-[calc(100%-32px)] flex-wrap items-center gap-3 rounded-xl border border-line bg-float px-4 py-2 text-[13px] shadow-[var(--shadow)]">
               <span>{t('The attendee list has changed.')}</span>
-              <button data-testid="note-people-write-again" onClick={writeAgain} className="workspace-button primary">{t('Regenerate summary')}</button>
-            </div>
-          )}
-          {confirming && (
-            <div data-testid="note-confirm" role="alertdialog" aria-label={t('Regenerate summary?')} aria-describedby="note-rewrite-description"
-              onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); dismissRewrite() } }}
-              className="pointer-events-auto mx-auto mt-3 flex w-fit max-w-[calc(100%-32px)] flex-wrap items-center gap-3 rounded-xl border border-line bg-float px-4 py-2.5 text-sm shadow-[var(--shadow)]">
-              <span id="note-rewrite-description">{t('Your edits to the summary will be replaced.')}</span>
-              <button data-testid="note-write-again-cancel" autoFocus onClick={dismissRewrite} className="workspace-button">{t('Cancel')}</button>
-              <button data-testid="note-write-again-confirm" onClick={writeAgain} className="workspace-button primary">{t('Regenerate summary')}</button>
+              <button data-testid="note-people-write-again" onClick={requestRewrite} className="workspace-button primary">{t('Regenerate summary')}</button>
             </div>
           )}
           {saveStatus === 'failed' && (
@@ -491,7 +503,7 @@ function Title({ id, title, editing, onEdit }: { id: string; title: string; edit
 /** The enhanced side: waiting, the draft as it is written, the saved notes (editable), or what went wrong */
 function Enhanced({ notes, presentation, disabled, onChange, onBlur, onRetry, focus }: { presentation: ReturnType<typeof useSummaryPresentation>; focus?: { match?: string; seq: number }; notes: NoteView; disabled?: boolean; onChange: (md: string) => void; onBlur: () => void; onRetry: () => void }) {
   const { status } = notes
-  const handoff = presentation === 'handoff'
+  const handoff = presentation === 'handoff' || presentation === 'reset'
   const writing = presentation === 'waiting' || presentation === 'streaming' || handoff
   const rewriting = presentation === 'rewriting'
   const surface = useRef<HTMLDivElement>(null), height = useRef(0)
@@ -512,6 +524,10 @@ function Enhanced({ notes, presentation, disabled, onChange, onBlur, onRetry, fo
       </InlineError>
     )
   }
+  if (presentation === 'stopped') return <div className="summary-stopped">
+    <p role="status">{t('Summary stopped.')}</p>
+    <button type="button" onClick={onRetry} className="summary-generate flex items-center gap-2.5 rounded-xl px-3 py-2 text-start text-sm whitespace-nowrap text-ink hover:bg-[var(--line)] focus-visible:bg-[var(--line)]"><RotateCcw size={15} strokeWidth={1.75} aria-hidden="true" className="text-muted" />{t('Generate summary')}</button>
+  </div>
   if (presentation === 'empty') return <p data-testid="note-enhanced-empty" className="text-[15px] text-muted">{t('There is no transcript or typed note to summarize.')}</p>
   if (presentation === 'waiting') {
     return (
@@ -528,14 +544,11 @@ function Enhanced({ notes, presentation, disabled, onChange, onBlur, onRetry, fo
         <span>{t("Yogurt couldn't regenerate the summary, so your previous version is still shown.")}</span>
         <button onClick={onRetry} className="inline-error-action">{t('Try again')}</button>
       </InlineError>}
-      {(rewriting || handoff) && <SummaryWaiting outline={false} writing={handoff} part={status === 'writing' ? notes.part : undefined} />}
-      <div ref={surface} className="summary-rewrite" data-rewriting={rewriting} data-handoff={handoff} style={handoff ? { minHeight: height.current } : undefined}>
+      {rewriting && <SummaryWaiting outline={false} part={status === 'writing' ? notes.part : undefined} />}
+      <div ref={surface} className="summary-rewrite" data-rewriting={rewriting} data-handoff={handoff} data-resetting={presentation === 'reset'} style={handoff ? { minHeight: height.current } : undefined}>
         <div className="summary-result">
-          <Editor focus={focus} testId="note-enhanced-editor" label={t('Summary')} className="enhanced" markdown={writing ? draft : notes.enhanced ?? ''} streaming={writing} editable={!writing && !rewriting && !disabled} onChange={onChange} onBlur={onBlur} />
+          <Editor focus={focus} testId="note-enhanced-editor" label={t('Summary')} className="enhanced" markdown={handoff ? notes.enhanced ?? '' : writing ? draft : notes.enhanced ?? ''} streaming={writing && !handoff} editable={!writing && !rewriting && !disabled} onChange={onChange} onBlur={onBlur} />
         </div>
-        {handoff && <div className="summary-previous" aria-hidden="true" inert>
-          <Editor testId="note-enhanced-previous" label={t('Summary')} className="enhanced" markdown={notes.enhanced ?? ''} editable={false} />
-        </div>}
       </div>
       {/* the caret dot and the Summarizing pill show progress; a visible label here would ride the end of the text up and down */}
       {writing && <p className="sr-only" aria-live="polite">{t('Generating notes…')}</p>}

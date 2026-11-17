@@ -1,5 +1,5 @@
 {
-  "Link event": "ইভেন্ট লিঙ্ক করুন",
+  "Other people": "অন্যান্য ব্যক্তি",
   "No events": "কোনো ইভেন্ট নেই",
   "Go to {date}": "{date} তারিখে যান",
   "Resume notes · {title}": "নোট নেওয়া চালিয়ে যান · {title}",
@@ -16,7 +16,6 @@
   "Open": "খুলুন",
   "Next day": "পরের দিন",
   "Previous day": "আগের দিন",
-  "Link to a calendar event": "ক্যালেন্ডারের ইভেন্টে লিঙ্ক করুন",
   "Yogurt couldn't update the calendar link. Try again.": "Yogurt ক্যালেন্ডারের লিংক আপডেট করতে পারেনি। আবার চেষ্টা করুন।",
   "Keep the title, attendees and notes.": "শিরোনাম, অংশগ্রহণকারী ও নোট রাখুন।",
   "Unlink calendar event": "ক্যালেন্ডার ইভেন্টের সংযোগ সরান",
@@ -314,7 +313,6 @@
   "Recording {title}": "{title} রেকর্ড হচ্ছে",
   "Redo": "আবার করুন",
   "Regenerate summary": "সারাংশ আবার তৈরি করুন",
-  "Regenerate summary?": "সারাংশ আবার তৈরি করবেন?",
   "Reload": "আবার লোড করুন",
   "Remove": "সরান",
   "Remove {name}": "{name} সরান",
@@ -381,7 +379,6 @@
   "Sum up the meeting so far": "এখন পর্যন্ত মিটিংয়ের সারাংশ দাও",
   "Summarizing…": "সারাংশ তৈরি হচ্ছে…",
   "Summary": "সারাংশ",
-  "Summary actions": "সারাংশের কাজ",
   "Sure. The site goes live on Tuesday.": "অবশ্যই। সাইট মঙ্গলবার লাইভ হবে।",
   "System Audio Recording Only": "শুধু সিস্টেম অডিও রেকর্ডিং",
   "System Settings is open at {pane}.": "সিস্টেম সেটিংস {pane}-এ খোলা আছে।",
@@ -668,5 +665,14 @@
   "Dock only": "শুধু Dock",
   "Summary language": "সারাংশের ভাষা",
   "Same as the meeting": "মিটিংয়ের ভাষা",
-  "Used for new summaries and when you write them again.": "নতুন সারাংশ ও সারাংশ আবার লেখার সময় ব্যবহৃত হয়।"
+  "Used for new summaries and when you write them again.": "নতুন সারাংশ ও সারাংশ আবার লেখার সময় ব্যবহৃত হয়।",
+  "Available after recording": "রেকর্ডিংয়ের পরে উপলব্ধ",
+  "Writing the summary": "সারাংশ লেখা হচ্ছে",
+  "Regenerate": "আবার তৈরি করুন",
+  "Note for the summary": "সারাংশের নির্দেশনা",
+  "Add a note, like shorter or in Spanish": "নির্দেশ দিন, যেমন ছোট বা স্প্যানিশে",
+  "Waiting for Yogurt AI to download": "Yogurt AI ডাউনলোডের অপেক্ষায়",
+  "Stop summary": "সারসংক্ষেপ বন্ধ করুন",
+  "Summary stopped.": "সারসংক্ষেপ তৈরি বন্ধ হয়েছে।",
+  "This window couldn't be displayed.": "এই উইন্ডোটি দেখানো যায়নি।"
 }

@@ -1,5 +1,5 @@
 {
-  "Link event": "关联活动",
+  "Other people": "其他人",
   "No events": "没有活动",
   "Go to {date}": "转到{date}",
   "Resume notes · {title}": "继续记笔记 · {title}",
@@ -16,7 +16,6 @@
   "Open": "打开",
   "Next day": "后一天",
   "Previous day": "前一天",
-  "Link to a calendar event": "关联到日历活动",
   "Yogurt couldn't update the calendar link. Try again.": "Yogurt 无法更新日历链接。请重试。",
   "Keep the title, attendees and notes.": "保留标题、参会人和笔记。",
   "Unlink calendar event": "取消关联日历事件",
@@ -305,7 +304,6 @@
   "Recording {title}": "正在录制{title}",
   "Redo": "重做",
   "Regenerate summary": "重新生成摘要",
-  "Regenerate summary?": "要重新生成摘要吗？",
   "Reload": "重新载入",
   "Remove": "移除",
   "Remove {name}": "移除 {name}",
@@ -369,7 +367,6 @@
   "Sum up the meeting so far": "总结一下目前为止的会议",
   "Summarizing…": "正在总结…",
   "Summary": "摘要",
-  "Summary actions": "摘要操作",
   "Sure. The site goes live on Tuesday.": "没问题。网站周二上线。",
   "System Audio Recording Only": "仅系统录音",
   "System Settings is open at {pane}.": "系统设置已打开“{pane}”。",
@@ -638,5 +635,14 @@
   "Dock only": "仅 Dock",
   "Summary language": "摘要语言",
   "Same as the meeting": "与会议相同",
-  "Used for new summaries and when you write them again.": "用于新摘要和重新生成的摘要。"
+  "Used for new summaries and when you write them again.": "用于新摘要和重新生成的摘要。",
+  "Available after recording": "录音结束后可用",
+  "Writing the summary": "正在撰写摘要",
+  "Regenerate": "重新生成",
+  "Note for the summary": "摘要要求",
+  "Add a note, like shorter or in Spanish": "添加要求，例如更简短或用西班牙语",
+  "Waiting for Yogurt AI to download": "等待下载 Yogurt AI",
+  "Stop summary": "停止总结",
+  "Summary stopped.": "已停止总结。",
+  "This window couldn't be displayed.": "无法显示此窗口。"
 }

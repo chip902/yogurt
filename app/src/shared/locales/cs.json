@@ -1,5 +1,5 @@
 {
-  "Link event": "Propojit událost",
+  "Other people": "Ostatní lidé",
   "No events": "Žádné události",
   "Go to {date}": "Přejít na {date}",
   "Resume notes · {title}": "Pokračovat v poznámkách · {title}",
@@ -16,7 +16,6 @@
   "Open": "Otevřít",
   "Next day": "Další den",
   "Previous day": "Předchozí den",
-  "Link to a calendar event": "Propojit s událostí v kalendáři",
   "Yogurt couldn't update the calendar link. Try again.": "Yogurt nemohl aktualizovat propojení s kalendářem. Zkuste to znovu.",
   "Keep the title, attendees and notes.": "Zachovat název, účastníky a poznámky.",
   "Unlink calendar event": "Odpojit událost z kalendáře",
@@ -320,7 +319,6 @@
   "Recording {title}": "Nahrává se {title}",
   "Redo": "Znovu",
   "Regenerate summary": "Vytvořit souhrn znovu",
-  "Regenerate summary?": "Vytvořit souhrn znovu?",
   "Reload": "Znovu načíst",
   "Remove": "Odstranit",
   "Remove {name}": "Odstranit {name}",
@@ -389,7 +387,6 @@
   "Sum up the meeting so far": "Shrň dosavadní schůzku",
   "Summarizing…": "Vytváření shrnutí…",
   "Summary": "Souhrn",
-  "Summary actions": "Akce souhrnu",
   "Sure. The site goes live on Tuesday.": "Jasně. Web spouštíme v úterý.",
   "System Audio Recording Only": "Pouze nahrávání systémového zvuku",
   "System Settings is open at {pane}.": "Nastavení systému je otevřené v části {pane}.",
@@ -711,5 +708,14 @@
   "Dock only": "Pouze Dock",
   "Summary language": "Jazyk shrnutí",
   "Same as the meeting": "Stejný jako na schůzce",
-  "Used for new summaries and when you write them again.": "Použije se pro nová i znovu vytvořená shrnutí."
+  "Used for new summaries and when you write them again.": "Použije se pro nová i znovu vytvořená shrnutí.",
+  "Available after recording": "Dostupné po nahrávání",
+  "Writing the summary": "Vytváření shrnutí",
+  "Regenerate": "Vygenerovat znovu",
+  "Note for the summary": "Pokyn pro shrnutí",
+  "Add a note, like shorter or in Spanish": "Přidejte pokyn, třeba kratší nebo španělsky",
+  "Waiting for Yogurt AI to download": "Čekání na stažení Yogurt AI",
+  "Stop summary": "Zastavit shrnutí",
+  "Summary stopped.": "Vytváření shrnutí zastaveno.",
+  "This window couldn't be displayed.": "Toto okno se nepodařilo zobrazit."
 }

@@ -1,5 +1,5 @@
 {
-  "Link event": "Vincular evento",
+  "Other people": "Outras pessoas",
   "No events": "Nenhum evento",
   "Go to {date}": "Ir para {date}",
   "Resume notes · {title}": "Retomar anotações · {title}",
@@ -16,7 +16,6 @@
   "Open": "Abrir",
   "Next day": "Próximo dia",
   "Previous day": "Dia anterior",
-  "Link to a calendar event": "Vincular a um evento do calendário",
   "Yogurt couldn't update the calendar link. Try again.": "O Yogurt não conseguiu atualizar o vínculo com o calendário. Tente de novo.",
   "Keep the title, attendees and notes.": "Manter o título, os participantes e as notas.",
   "Unlink calendar event": "Desvincular evento do calendário",
@@ -317,7 +316,6 @@
   "Recording {title}": "Gravando {title}",
   "Redo": "Refazer",
   "Regenerate summary": "Gerar resumo de novo",
-  "Regenerate summary?": "Gerar o resumo de novo?",
   "Reload": "Recarregar",
   "Remove": "Remover",
   "Remove {name}": "Remover {name}",
@@ -385,7 +383,6 @@
   "Sum up the meeting so far": "Resuma a reunião até agora",
   "Summarizing…": "Resumindo…",
   "Summary": "Resumo",
-  "Summary actions": "Ações do resumo",
   "Sure. The site goes live on Tuesday.": "Claro. O site entra no ar na terça.",
   "System Audio Recording Only": "Somente Gravação de Áudio do Sistema",
   "System Settings is open at {pane}.": "Os Ajustes do Sistema estão abertos em {pane}.",
@@ -696,5 +693,14 @@
   "Dock only": "Apenas Dock",
   "Summary language": "Idioma do resumo",
   "Same as the meeting": "O mesmo da reunião",
-  "Used for new summaries and when you write them again.": "Usado em novos resumos e quando você os reescreve."
+  "Used for new summaries and when you write them again.": "Usado em novos resumos e quando você os reescreve.",
+  "Available after recording": "Disponível após a gravação",
+  "Writing the summary": "Escrevendo o resumo",
+  "Regenerate": "Gerar novamente",
+  "Note for the summary": "Instrução para o resumo",
+  "Add a note, like shorter or in Spanish": "Adicione uma nota, como mais curto ou em espanhol",
+  "Waiting for Yogurt AI to download": "Aguardando o download do Yogurt AI",
+  "Stop summary": "Parar resumo",
+  "Summary stopped.": "Resumo interrompido.",
+  "This window couldn't be displayed.": "Não foi possível exibir esta janela."
 }

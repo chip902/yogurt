@@ -1,5 +1,5 @@
 {
-  "Link event": "Koble til hendelse",
+  "Other people": "Andre personer",
   "No events": "Ingen hendelser",
   "Go to {date}": "Gå til {date}",
   "Resume notes · {title}": "Fortsett notater · {title}",
@@ -16,7 +16,6 @@
   "Open": "Åpne",
   "Next day": "Neste dag",
   "Previous day": "Forrige dag",
-  "Link to a calendar event": "Koble til en kalenderhendelse",
   "Yogurt couldn't update the calendar link. Try again.": "Yogurt kunne ikke oppdatere koblingen til kalenderen. Prøv igjen.",
   "Keep the title, attendees and notes.": "Behold tittel, deltakere og notater.",
   "Unlink calendar event": "Koble fra kalenderhendelse",
@@ -314,7 +313,6 @@
   "Recording {title}": "Tar opp {title}",
   "Redo": "Gjør om",
   "Regenerate summary": "Lag sammendrag på nytt",
-  "Regenerate summary?": "Lage sammendraget på nytt?",
   "Reload": "Last inn på nytt",
   "Remove": "Fjern",
   "Remove {name}": "Fjern {name}",
@@ -381,7 +379,6 @@
   "Sum up the meeting so far": "Oppsummer møtet så langt",
   "Summarizing…": "Oppsummerer…",
   "Summary": "Sammendrag",
-  "Summary actions": "Handlinger for sammendrag",
   "Sure. The site goes live on Tuesday.": "Klart. Nettstedet går live på tirsdag.",
   "System Audio Recording Only": "Kun systemlydopptak",
   "System Settings is open at {pane}.": "Systeminnstillinger er åpnet ved {pane}.",
@@ -680,5 +677,14 @@
   "Dock only": "Bare Dock",
   "Summary language": "Oppsummeringsspråk",
   "Same as the meeting": "Samme som møtet",
-  "Used for new summaries and when you write them again.": "Brukes til nye oppsummeringer og når du skriver dem på nytt."
+  "Used for new summaries and when you write them again.": "Brukes til nye oppsummeringer og når du skriver dem på nytt.",
+  "Available after recording": "Tilgjengelig etter opptaket",
+  "Writing the summary": "Skriver sammendraget",
+  "Regenerate": "Generer på nytt",
+  "Note for the summary": "Merknad til sammendraget",
+  "Add a note, like shorter or in Spanish": "Legg til en merknad, som kortere eller på spansk",
+  "Waiting for Yogurt AI to download": "Venter på nedlasting av Yogurt AI",
+  "Stop summary": "Stopp oppsummering",
+  "Summary stopped.": "Oppsummering stoppet.",
+  "This window couldn't be displayed.": "Dette vinduet kunne ikke vises."
 }

@@ -1,5 +1,5 @@
 {
-  "Link event": "Termin verknüpfen",
+  "Other people": "Weitere Personen",
   "No events": "Keine Termine",
   "Go to {date}": "Zum {date} springen",
   "Resume notes · {title}": "Notizen fortsetzen · {title}",
@@ -16,7 +16,6 @@
   "Open": "Öffnen",
   "Next day": "Nächster Tag",
   "Previous day": "Vorheriger Tag",
-  "Link to a calendar event": "Mit einem Kalendertermin verknüpfen",
   "Yogurt couldn't update the calendar link. Try again.": "Yogurt konnte die Kalenderverknüpfung nicht aktualisieren. Versuch es noch einmal.",
   "Keep the title, attendees and notes.": "Titel, Teilnehmende und Notizen behalten.",
   "Unlink calendar event": "Kalendertermin trennen",
@@ -314,7 +313,6 @@
   "Recording {title}": "{title} wird aufgenommen",
   "Redo": "Wiederholen",
   "Regenerate summary": "Zusammenfassung neu erstellen",
-  "Regenerate summary?": "Zusammenfassung neu erstellen?",
   "Reload": "Neu laden",
   "Remove": "Entfernen",
   "Remove {name}": "{name} entfernen",
@@ -381,7 +379,6 @@
   "Sum up the meeting so far": "Fass das Meeting bisher zusammen",
   "Summarizing…": "Wird zusammengefasst…",
   "Summary": "Zusammenfassung",
-  "Summary actions": "Aktionen für die Zusammenfassung",
   "Sure. The site goes live on Tuesday.": "Klar. Die Website geht am Dienstag online.",
   "System Audio Recording Only": "Nur Systemaudioaufnahme",
   "System Settings is open at {pane}.": "Die Systemeinstellungen sind bei „{pane}“ geöffnet.",
@@ -680,5 +677,14 @@
   "Dock only": "Nur Dock",
   "Summary language": "Sprache der Zusammenfassung",
   "Same as the meeting": "Wie im Meeting",
-  "Used for new summaries and when you write them again.": "Gilt für neue und neu geschriebene Zusammenfassungen."
+  "Used for new summaries and when you write them again.": "Gilt für neue und neu geschriebene Zusammenfassungen.",
+  "Available after recording": "Nach der Aufnahme verfügbar",
+  "Writing the summary": "Zusammenfassung wird geschrieben",
+  "Regenerate": "Neu erstellen",
+  "Note for the summary": "Hinweis für die Zusammenfassung",
+  "Add a note, like shorter or in Spanish": "Hinweis hinzufügen, etwa kürzer oder auf Spanisch",
+  "Waiting for Yogurt AI to download": "Warten auf den Download von Yogurt AI",
+  "Stop summary": "Zusammenfassung stoppen",
+  "Summary stopped.": "Zusammenfassung gestoppt.",
+  "This window couldn't be displayed.": "Dieses Fenster konnte nicht angezeigt werden."
 }

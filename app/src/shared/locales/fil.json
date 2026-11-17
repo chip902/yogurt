@@ -1,5 +1,5 @@
 {
-  "Link event": "I-link ang event",
+  "Other people": "Iba pang tao",
   "No events": "Walang event",
   "Go to {date}": "Pumunta sa {date}",
   "Resume notes · {title}": "Ipagpatuloy ang mga tala · {title}",
@@ -16,7 +16,6 @@
   "Open": "Buksan",
   "Next day": "Susunod na araw",
   "Previous day": "Nakaraang araw",
-  "Link to a calendar event": "I-link sa isang kaganapan sa kalendaryo",
   "Yogurt couldn't update the calendar link. Try again.": "Hindi ma-update ng Yogurt ang link sa calendar. Subukan ulit.",
   "Keep the title, attendees and notes.": "Panatilihin ang pamagat, mga kalahok at mga note.",
   "Unlink calendar event": "Alisin ang link sa event ng calendar",
@@ -314,7 +313,6 @@
   "Recording {title}": "Nire-record ang {title}",
   "Redo": "Ulitin",
   "Regenerate summary": "Gawin ulit ang buod",
-  "Regenerate summary?": "Gawin ulit ang buod?",
   "Reload": "I-reload",
   "Remove": "Alisin",
   "Remove {name}": "Alisin ang {name}",
@@ -381,7 +379,6 @@
   "Sum up the meeting so far": "Ibuod ang meeting hanggang ngayon",
   "Summarizing…": "Binubuod…",
   "Summary": "Buod",
-  "Summary actions": "Mga aksiyon sa buod",
   "Sure. The site goes live on Tuesday.": "Sige. Live na ang site sa Martes.",
   "System Audio Recording Only": "System Audio Recording Only",
   "System Settings is open at {pane}.": "Nakabukas ang System Settings sa {pane}.",
@@ -680,5 +677,14 @@
   "Dock only": "Dock lang",
   "Summary language": "Wika ng buod",
   "Same as the meeting": "Tulad ng sa pulong",
-  "Used for new summaries and when you write them again.": "Gagamitin sa mga bagong buod at kapag isinulat muli ang mga ito."
+  "Used for new summaries and when you write them again.": "Gagamitin sa mga bagong buod at kapag isinulat muli ang mga ito.",
+  "Available after recording": "Magagamit pagkatapos mag-record",
+  "Writing the summary": "Isinusulat ang buod",
+  "Regenerate": "Buuin muli",
+  "Note for the summary": "Tagubilin para sa buod",
+  "Add a note, like shorter or in Spanish": "Magdagdag ng bilin, gaya ng mas maikli o sa Espanyol",
+  "Waiting for Yogurt AI to download": "Hinihintay ang pag-download ng Yogurt AI",
+  "Stop summary": "Ihinto ang buod",
+  "Summary stopped.": "Nahinto ang paggawa ng buod.",
+  "This window couldn't be displayed.": "Hindi maipakita ang window na ito."
 }

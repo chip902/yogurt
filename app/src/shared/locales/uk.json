@@ -1,5 +1,5 @@
 {
-  "Link event": "Пов’язати подію",
+  "Other people": "Інші учасники",
   "No events": "Немає подій",
   "Go to {date}": "Перейти до {date}",
   "Resume notes · {title}": "Продовжити нотатки · {title}",
@@ -16,7 +16,6 @@
   "Open": "Відкрити",
   "Next day": "Наступний день",
   "Previous day": "Попередній день",
-  "Link to a calendar event": "Пов’язати з подією календаря",
   "Yogurt couldn't update the calendar link. Try again.": "Yogurt не зміг оновити зв’язок із календарем. Спробуйте ще раз.",
   "Keep the title, attendees and notes.": "Залишити назву, учасників і нотатки.",
   "Unlink calendar event": "Відв’язати подію календаря",
@@ -320,7 +319,6 @@
   "Recording {title}": "Записуємо {title}",
   "Redo": "Повторити",
   "Regenerate summary": "Створити підсумок заново",
-  "Regenerate summary?": "Створити підсумок заново?",
   "Reload": "Перезавантажити",
   "Remove": "Вилучити",
   "Remove {name}": "Вилучити {name}",
@@ -389,7 +387,6 @@
   "Sum up the meeting so far": "Підсумуй зустріч на цю мить",
   "Summarizing…": "Створення підсумку…",
   "Summary": "Підсумок",
-  "Summary actions": "Дії з підсумком",
   "Sure. The site goes live on Tuesday.": "Звісно. Сайт запускається у вівторок.",
   "System Audio Recording Only": "Лише записування системного звуку",
   "System Settings is open at {pane}.": "Системні параметри відкрито на розділі «{pane}».",
@@ -708,5 +705,14 @@
   "Dock only": "Лише Dock",
   "Summary language": "Мова підсумку",
   "Same as the meeting": "Як на зустрічі",
-  "Used for new summaries and when you write them again.": "Використовується для нових і повторно створених підсумків."
+  "Used for new summaries and when you write them again.": "Використовується для нових і повторно створених підсумків.",
+  "Available after recording": "Доступно після запису",
+  "Writing the summary": "Створюється підсумок",
+  "Regenerate": "Створити знову",
+  "Note for the summary": "Побажання до підсумку",
+  "Add a note, like shorter or in Spanish": "Додайте побажання, як-от коротше чи іспанською",
+  "Waiting for Yogurt AI to download": "Очікування завантаження Yogurt AI",
+  "Stop summary": "Зупинити підсумок",
+  "Summary stopped.": "Створення підсумку зупинено.",
+  "This window couldn't be displayed.": "Не вдалося відобразити це вікно."
 }

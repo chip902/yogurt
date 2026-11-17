@@ -1,5 +1,5 @@
 {
-  "Link event": "Tautkan acara",
+  "Other people": "Orang lain",
   "No events": "Tidak ada acara",
   "Go to {date}": "Buka tanggal {date}",
   "Resume notes · {title}": "Lanjutkan catatan · {title}",
@@ -16,7 +16,6 @@
   "Open": "Buka",
   "Next day": "Hari berikutnya",
   "Previous day": "Hari sebelumnya",
-  "Link to a calendar event": "Tautkan ke acara kalender",
   "Yogurt couldn't update the calendar link. Try again.": "Yogurt tidak bisa memperbarui tautan kalender. Coba lagi.",
   "Keep the title, attendees and notes.": "Pertahankan judul, peserta, dan catatan.",
   "Unlink calendar event": "Lepaskan tautan acara kalender",
@@ -305,7 +304,6 @@
   "Recording {title}": "Merekam {title}",
   "Redo": "Ulang",
   "Regenerate summary": "Buat ulang ringkasan",
-  "Regenerate summary?": "Buat ulang ringkasan?",
   "Reload": "Muat Ulang",
   "Remove": "Hapus",
   "Remove {name}": "Hapus {name}",
@@ -369,7 +367,6 @@
   "Sum up the meeting so far": "Ringkas rapat sejauh ini",
   "Summarizing…": "Merangkum…",
   "Summary": "Ringkasan",
-  "Summary actions": "Tindakan ringkasan",
   "Sure. The site goes live on Tuesday.": "Tentu. Situsnya tayang hari Selasa.",
   "System Audio Recording Only": "Hanya Rekaman Audio Sistem",
   "System Settings is open at {pane}.": "Pengaturan Sistem terbuka di {pane}.",
@@ -638,5 +635,14 @@
   "Dock only": "Hanya Dock",
   "Summary language": "Bahasa ringkasan",
   "Same as the meeting": "Sama dengan rapat",
-  "Used for new summaries and when you write them again.": "Digunakan untuk ringkasan baru dan saat menulisnya ulang."
+  "Used for new summaries and when you write them again.": "Digunakan untuk ringkasan baru dan saat menulisnya ulang.",
+  "Available after recording": "Tersedia setelah perekaman",
+  "Writing the summary": "Sedang menulis ringkasan",
+  "Regenerate": "Buat ulang",
+  "Note for the summary": "Catatan untuk ringkasan",
+  "Add a note, like shorter or in Spanish": "Catatan, misalnya lebih singkat atau bahasa Spanyol",
+  "Waiting for Yogurt AI to download": "Menunggu unduhan Yogurt AI",
+  "Stop summary": "Hentikan ringkasan",
+  "Summary stopped.": "Pembuatan ringkasan dihentikan.",
+  "This window couldn't be displayed.": "Jendela ini tidak dapat ditampilkan."
 }

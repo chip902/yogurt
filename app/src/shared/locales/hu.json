@@ -1,5 +1,5 @@
 {
-  "Link event": "Esemény csatolása",
+  "Other people": "Más résztvevők",
   "No events": "Nincs esemény",
   "Go to {date}": "Ugrás erre a napra: {date}",
   "Resume notes · {title}": "Jegyzetelés folytatása · {title}",
@@ -16,7 +16,6 @@
   "Open": "Megnyitás",
   "Next day": "Következő nap",
   "Previous day": "Előző nap",
-  "Link to a calendar event": "Kapcsolás naptáreseményhez",
   "Yogurt couldn't update the calendar link. Try again.": "A Yogurt nem tudta frissíteni a naptárkapcsolatot. Próbáld újra.",
   "Keep the title, attendees and notes.": "A cím, a résztvevők és a jegyzetek megtartása.",
   "Unlink calendar event": "Naptáresemény leválasztása",
@@ -314,7 +313,6 @@
   "Recording {title}": "Felvétel: {title}",
   "Redo": "Ismétlés",
   "Regenerate summary": "Összefoglaló újrakészítése",
-  "Regenerate summary?": "Újra elkészíted az összefoglalót?",
   "Reload": "Újratöltés",
   "Remove": "Eltávolítás",
   "Remove {name}": "{name} eltávolítása",
@@ -381,7 +379,6 @@
   "Sum up the meeting so far": "Foglald össze az eddigi megbeszélést",
   "Summarizing…": "Összegzés…",
   "Summary": "Összefoglaló",
-  "Summary actions": "Összefoglaló műveletei",
   "Sure. The site goes live on Tuesday.": "Persze. Kedden élesedik az oldal.",
   "System Audio Recording Only": "Csak rendszerhangfelvétel",
   "System Settings is open at {pane}.": "A Rendszerbeállítások itt van nyitva: {pane}.",
@@ -668,5 +665,14 @@
   "Dock only": "Csak a Dock",
   "Summary language": "Összefoglaló nyelve",
   "Same as the meeting": "A megbeszélés nyelve",
-  "Used for new summaries and when you write them again.": "Új és újraírt összefoglalókhoz használjuk."
+  "Used for new summaries and when you write them again.": "Új és újraírt összefoglalókhoz használjuk.",
+  "Available after recording": "Felvétel után elérhető",
+  "Writing the summary": "Az összefoglaló készül",
+  "Regenerate": "Újragenerálás",
+  "Note for the summary": "Utasítás az összefoglalóhoz",
+  "Add a note, like shorter or in Spanish": "Adjon meg kérést, például rövidebben vagy spanyolul",
+  "Waiting for Yogurt AI to download": "Várakozás a Yogurt AI letöltésére",
+  "Stop summary": "Összefoglalás leállítása",
+  "Summary stopped.": "Az összefoglalás leállt.",
+  "This window couldn't be displayed.": "Ez az ablak nem jeleníthető meg."
 }

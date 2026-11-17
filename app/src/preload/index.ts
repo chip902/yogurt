@@ -4,6 +4,7 @@ import { capabilities, platformOf } from '../shared/platform'
 import type { ChatView, ConversationSummary, ConversationView, NoteView, PromptAction, SetupState, UpdateStatus, WidgetView, YogurtApi } from '../shared/types'
 
 const api: YogurtApi = {
+  reportRendererError: report => ipcRenderer.send('renderer:error', report),
   platform: process.platform,
   os: platformOf(process.platform, process.env),
   capabilities: capabilities(platformOf(process.platform, process.env)),
@@ -118,7 +119,8 @@ const api: YogurtApi = {
       return () => { ipcRenderer.removeListener('notes:flush-request', run) }
     },
     keptEdits: (id) => { ipcRenderer.send('notes:kept-edits', id) },
-    writeAgain: (id) => ipcRenderer.invoke('notes:write-again', id),
+    writeAgain: (id, note) => ipcRenderer.invoke('notes:write-again', id, note),
+    stop: (id) => ipcRenderer.invoke('notes:stop', id),
     onChange: (cb) => {
       const on = (_e: unknown, v: NoteView) => cb(v)
       ipcRenderer.on('notes:changed', on)

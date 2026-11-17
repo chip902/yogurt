@@ -1,5 +1,5 @@
 {
-  "Link event": "इवेंट लिंक करें",
+  "Other people": "अन्य लोग",
   "No events": "कोई इवेंट नहीं",
   "Go to {date}": "{date} पर जाएँ",
   "Resume notes · {title}": "नोट्स लेना जारी रखें · {title}",
@@ -16,7 +16,6 @@
   "Open": "खोलें",
   "Next day": "अगला दिन",
   "Previous day": "पिछला दिन",
-  "Link to a calendar event": "कैलेंडर इवेंट से लिंक करें",
   "Yogurt couldn't update the calendar link. Try again.": "Yogurt कैलेंडर लिंक अपडेट नहीं कर सका। फिर से कोशिश करें।",
   "Keep the title, attendees and notes.": "टाइटल, भाग लेने वाले और नोट्स रखें।",
   "Unlink calendar event": "कैलेंडर इवेंट से अलग करें",
@@ -314,7 +313,6 @@
   "Recording {title}": "{title} रिकॉर्ड हो रहा है",
   "Redo": "फिर से करें",
   "Regenerate summary": "सारांश फिर से बनाएँ",
-  "Regenerate summary?": "सारांश फिर से बनाएँ?",
   "Reload": "फिर से लोड करें",
   "Remove": "हटाएं",
   "Remove {name}": "{name} हटाएं",
@@ -381,7 +379,6 @@
   "Sum up the meeting so far": "अब तक की मीटिंग का सार बताओ",
   "Summarizing…": "सारांश बनाया जा रहा है…",
   "Summary": "सारांश",
-  "Summary actions": "सारांश के विकल्प",
   "Sure. The site goes live on Tuesday.": "ज़रूर। साइट मंगलवार को लाइव होगी।",
   "System Audio Recording Only": "केवल सिस्टम ऑडियो रिकॉर्डिंग",
   "System Settings is open at {pane}.": "सिस्टम सेटिंग्ज़ {pane} पर खुली है।",
@@ -668,5 +665,14 @@
   "Dock only": "केवल Dock",
   "Summary language": "सारांश की भाषा",
   "Same as the meeting": "मीटिंग की भाषा",
-  "Used for new summaries and when you write them again.": "नए सारांशों और उन्हें दोबारा लिखते समय इस्तेमाल होती है।"
+  "Used for new summaries and when you write them again.": "नए सारांशों और उन्हें दोबारा लिखते समय इस्तेमाल होती है।",
+  "Available after recording": "रिकॉर्डिंग के बाद उपलब्ध",
+  "Writing the summary": "सारांश लिखा जा रहा है",
+  "Regenerate": "फिर से बनाएँ",
+  "Note for the summary": "सारांश के लिए निर्देश",
+  "Add a note, like shorter or in Spanish": "निर्देश जोड़ें, जैसे छोटा या स्पेनिश में",
+  "Waiting for Yogurt AI to download": "Yogurt AI डाउनलोड होने का इंतज़ार",
+  "Stop summary": "सारांश रोकें",
+  "Summary stopped.": "सारांश बनाना रोक दिया गया।",
+  "This window couldn't be displayed.": "यह विंडो दिखाई नहीं जा सकी।"
 }
