@@ -5,7 +5,7 @@ import { readCall, summarize, type AxWindow, type CallKind } from './parse'
 
 /**
  * Names from the call: while a meeting records, the call app it is in (Zoom, Teams, Meet in a browser) is read through
- * the accessibility tree about twice a second (macOS Accessibility, AT-SPI on Linux), and each line of the other side
+ * the accessibility tree about twice a second (macOS Accessibility, AT-SPI on Linux, UI Automation on Windows), and each line of the other side
  * is named after the person the app shows talking, or the only other person in the call. The mic is always You.
  * Without the permission, in another app, or when the app shows nothing clear, lines of the other side are Them.
  * Nothing is guessed, and nothing leaves the computer.
@@ -16,17 +16,19 @@ export type WatchLine = { t: number; app?: string; windows?: AxWindow[]; error?:
 export type Watch = (ids: string[], onLine: (l: WatchLine) => void) => { stop(): void }
 
 /** the call apps that can be read, by the name meeting detection gives them (detect.ts), and the kind of window each
- * has. A Mac's ids are bundle ids; Linux's are program names or Flatpak app ids. */
+ * has. A Mac's ids are bundle ids; Linux's are program names or Flatpak app ids; Windows's are program file names,
+ * lowercased (detect.ts). Webex's Windows window isn't read yet: its lines stay Them there. */
 const APPS: Record<string, { kind: CallKind; ids: string[] }> = {
-  Zoom: { kind: 'zoom', ids: ['us.zoom.xos', 'zoom', 'us.zoom.Zoom'] },
-  Teams: { kind: 'teams', ids: ['com.microsoft.teams2', 'com.microsoft.teams', 'teams-for-linux', 'com.github.IsmaelMartinez.teams_for_linux'] },
-  Chrome: { kind: 'meet', ids: ['com.google.Chrome', 'chrome', 'google-chrome'] },
-  Arc: { kind: 'meet', ids: ['company.thebrowser.Browser'] },
+  Zoom: { kind: 'zoom', ids: ['us.zoom.xos', 'zoom', 'us.zoom.Zoom', 'zoom.exe'] },
+  Teams: { kind: 'teams', ids: ['com.microsoft.teams2', 'com.microsoft.teams', 'teams-for-linux', 'com.github.IsmaelMartinez.teams_for_linux', 'ms-teams.exe', 'teams.exe'] },
+  Webex: { kind: 'webex', ids: ['Cisco-Systems.Spark', 'com.cisco.webexmeetingsapp'] },
+  Chrome: { kind: 'meet', ids: ['com.google.Chrome', 'chrome', 'google-chrome', 'chrome.exe'] },
+  Arc: { kind: 'meet', ids: ['company.thebrowser.Browser', 'arc.exe'] },
   Ardia: { kind: 'meet', ids: ['com.ardia.browser'] },
-  Brave: { kind: 'meet', ids: ['com.brave.Browser', 'brave'] },
-  Edge: { kind: 'meet', ids: ['com.microsoft.edgemac', 'msedge', 'com.microsoft.Edge'] },
+  Brave: { kind: 'meet', ids: ['com.brave.Browser', 'brave', 'brave.exe'] },
+  Edge: { kind: 'meet', ids: ['com.microsoft.edgemac', 'msedge', 'com.microsoft.Edge', 'msedge.exe'] },
   Safari: { kind: 'meet', ids: ['com.apple.Safari'] },
-  Firefox: { kind: 'meet', ids: ['org.mozilla.firefox', 'firefox', 'firefox-bin'] },
+  Firefox: { kind: 'meet', ids: ['org.mozilla.firefox', 'firefox', 'firefox-bin', 'firefox.exe'] },
 }
 /** The apps to read for a meeting: the one it was detected in; with none (started by hand) any of them, the frontmost with a call first */
 export const watchIds = (app: string | null): string[] => (app ? APPS[app]?.ids ?? [] : Object.values(APPS).flatMap((a) => a.ids))
@@ -40,7 +42,7 @@ const APP_LAG_MS = 750
 const LOGGED_CHANGES = 30
 
 type Sample = Omit<CallSample, 'ms'> & { t: number }
-type Session = { samples: Sample[]; priorLines: Set<number>; watch?: { stop(): void }; offset?: number; startedAt: number; pictured: boolean; errors: Set<string>; last: string; logged: number }
+type Session = { samples: Sample[]; priorLines: Set<number>; watch?: { stop(): void }; everyApp: boolean; offset?: number; startedAt: number; pictured: boolean; errors: Set<string>; last: string; logged: number }
 
 export function hookCallNames(p: {
   store: Pick<Store, 'meeting' | 'segments' | 'setSegmentSpeakers' | 'updateMeeting'>
@@ -54,10 +56,13 @@ export function hookCallNames(p: {
   onStart: (fn: (m: RecordingStart) => void) => unknown
   onStop: (fn: (m: Meeting) => void) => unknown
   onCapture: (fn: (c: { on(e: 'pcm', fn: (track: 'me' | 'them', ms: number, samples: Float32Array) => void): unknown }, meetingId: string) => void) => unknown
+  /** a recording started by hand learned its call app from the mic (watch.ts, CALL bind) */
+  onBind?: (fn: (m: Meeting) => void) => unknown
   log?: (msg: string) => void
   now?: () => number
 }) {
-  const log = p.log ?? ((s: string) => console.log(s))
+  // info, not log: main.log keeps info, warn and error, and these lines are how a call that stayed Them gets explained
+  const log = p.log ?? ((s: string) => console.info(s))
   const now = p.now ?? Date.now
   const sessions = new Map<string, Session>()
   const finals = new Map<string, Promise<void>>()
@@ -81,16 +86,31 @@ export function hookCallNames(p: {
     if (!s.pictured) { s.pictured = true; log(`call names: reading ${l.app} (${kind}), its window in short:\n${summarize(l.windows)}`) }
     const r = readCall(kind, l.windows)
     s.samples.push({ t: l.t, ...r })
-    const said = `${r.speaking.join(', ') || '-'} of ${r.participants.length}${r.me ? ', me known' : ''}`
+    // counts only: main.log is pasted into public issues, and names belong to the people in the call
+    const said = `${r.speaking.length} of ${r.participants.length}${r.me ? ', me known' : ''}`
     if (said !== s.last && s.logged < LOGGED_CHANGES) { s.logged++; log(`call names: ${kind} talking ${said}`) }
     s.last = said
   }
 
   p.onStart((m) => {
     const ids = watchIds(m.app)
-    const s: Session = { samples: [], priorLines: new Set(p.store.segments(m.id, { hidden: true }).map((line) => line.id)), startedAt: m.resume ? m.resume.startedAt - m.resume.startMs : m.startedAt, pictured: false, errors: new Set(), last: '', logged: 0 }
+    const s: Session = { everyApp: !m.app, samples: [], priorLines: new Set(p.store.segments(m.id, { hidden: true }).map((line) => line.id)), startedAt: m.resume ? m.resume.startedAt - m.resume.startMs : m.startedAt, pictured: false, errors: new Set(), last: '', logged: 0 }
     sessions.set(m.id, s)
     if (!ids.length) { log(`call names: ${m.app} can't be read, the other side is Them`); return }
+    try { s.watch = p.watch(ids, (l) => onLine(m.id, s, l)) } catch (e) { console.error('call names: the watch did not start', e) }
+  })
+
+  // A recording started by hand reads every call app, the frontmost with a call first; another app's window (a Teams
+  // chat) can win that. Once the mic says which app the call is in, only that one is read.
+  p.onBind?.((m) => {
+    const s = sessions.get(m.id)
+    if (!s || !s.everyApp || !m.app) return
+    s.everyApp = false
+    s.watch?.stop(); s.watch = undefined
+    const ids = watchIds(m.app)
+    log(`call names: the call is in ${m.app}, reading only it`)
+    if (!ids.length) return
+    s.pictured = false
     try { s.watch = p.watch(ids, (l) => onLine(m.id, s, l)) } catch (e) { console.error('call names: the watch did not start', e) }
   })
 

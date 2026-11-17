@@ -8,11 +8,12 @@
 /** one element of the tree as the helper copies it: role, subrole, description, title, value, identifier, DOM classes, size */
 export type AxNode = { r: string; s?: string; d?: string; t?: string; v?: string; i?: string; c?: string[]; w?: number; h?: number; k?: AxNode[] }
 export type AxWindow = { title?: string; id?: string; tree: AxNode }
-export type CallKind = 'zoom' | 'teams' | 'meet'
+export type CallKind = 'zoom' | 'teams' | 'meet' | 'webex'
 export type CallReading = { speaking: string[]; participants: string[]; me: string | null }
 
 // A role has two names: macOS Accessibility says AXTabGroup, AXStaticText, AXRow, AXOutline; AT-SPI (Linux) says
-// page tab, label/static/text, table row/list item, tree table/table/list. The rules below know both.
+// page tab, label/static/text, table row/list item, tree table/table/list. The rules below know both. Windows's helper
+// gives UI Automation's control types the AT-SPI names (yogurt-system parse.rs uia_role), so it reads as Linux does.
 const TAB_GROUP = new Set(['AXTabGroup', 'page tab'])
 const STATIC_TEXT = new Set(['AXStaticText', 'static', 'label', 'text', 'paragraph', 'heading', 'caption'])
 const ROW = new Set(['AXRow', 'table row', 'list item', 'row'])
@@ -107,8 +108,10 @@ function readZoom(windows: AxWindow[]): CallReading {
   let me: string | null = null
   for (const w of windows) {
     walk(w.tree, (n, up) => {
-      if (TAB_GROUP.has(n.r) && n.d) {
-        const tile = zoomTile(n.d)
+      // the words are the description on a Mac and Linux, the name under UI Automation (Windows)
+      const tileWords = n.d ?? n.t
+      if (TAB_GROUP.has(n.r) && tileWords) {
+        const tile = zoomTile(tileWords)
         if (tile) { participants.push(tile.name); if (tile.talking) speaking.push(tile.name) }
       }
       // the Linux Zoom Workplace tile is a push button named "video item <name> [Active Speaker]"
@@ -156,10 +159,33 @@ const TILE_UP = 7
 /** text in Meet's window that is never a person: times, the meeting code, chat */
 const NOT_A_NAME = /^\d{1,2}[:.]\d{2}(\s?[AP]M)?$|^[a-z]{3}-[a-z]{4}-[a-z]{3}$|says in chat|^(AM|PM)$|^\d+$/i
 
+/** Meet's own words that stand alone like a name */
+const MEET_WORDS = new Set(['meet', 'reframe', 'captions', 'chat', 'people', 'activities', 'host controls', 'present', 'raise hand', 'reactions'])
+/** lowercase words that sit inside real names: Ana María de la Cruz, Ludwig van Beethoven */
+const PARTICLES = new Set(['de', 'del', 'della', 'der', 'den', 'di', 'da', 'das', 'do', 'dos', 'du', 'la', 'le', 'van', 'von', 'ter', 'ten', 'y', 'e', 'bin', 'binti', 'al', 'el', 'ibn', 'zu'])
+
+/**
+ * A tile's name, or null for anything else Meet writes in a box of its own (#71): sentences from toasts and the lobby
+ * ("Your camera is on.", "Reducing noise"), times and dates, a shared tab's title ("Plan - Google Docs") and control
+ * labels. A name has no digits, no sentence ending, at most five words, and in a name of several words every word
+ * starts with a capital letter (or is a particle like "de", or comes from a script without capitals). Getting a person
+ * wrong means Them for their lines, never another name.
+ */
 function meetName(text: string): string | null {
   const name = text.normalize('NFKC').replace(/\s*\((presenting|presentation|you)[^)]*\)\s*$/i, '').trim()
-  return name.length >= 2 && name.length <= 60 && /\p{L}/u.test(name) && !NOT_A_NAME.test(name) ? name : null
+  if (name.length < 2 || name.length > 60 || !/\p{L}/u.test(name) || NOT_A_NAME.test(name)) return null
+  if (/\d|[?!…:/⌘]|\.\.|\s[-–—|]\s/.test(name) || MEET_WORDS.has(low(name))) return null
+  const words = name.split(/\s+/)
+  // "Jr." and initials end with a period; a sentence does
+  if (/\.$/.test(name) && words.at(-1)!.replace(/\.$/, '').length > 2) return null
+  if (words.length > 5) return null
+  if (words.length > 1 && words.some((w) => /^\p{Ll}/u.test(w) && !PARTICLES.has(w))) return null
+  return name
 }
+
+/** a toast, banner or other live area: Meet's messages, never a tile (a role on Linux and Windows, a subrole on a Mac) */
+const LIVE = new Set(['alert', 'notification', 'status bar', 'status', 'log', 'marquee', 'timer', 'AXApplicationAlert', 'AXApplicationStatus', 'AXApplicationLog', 'AXApplicationTimer', 'AXApplicationMarquee'])
+const isLive = (n: AxNode) => LIVE.has(n.r) || (!!n.s && LIVE.has(n.s))
 
 function readMeet(windows: AxWindow[], o: { talkingClasses?: string[] }): CallReading {
   const marks = new Set(o.talkingClasses ?? MEET_TALKING_CLASSES)
@@ -168,7 +194,7 @@ function readMeet(windows: AxWindow[], o: { talkingClasses?: string[] }): CallRe
     if (w.title && !/\bMeet\b/.test(w.title)) continue
     const skip = new Set((w.title ?? '').split(/\s+[-–—]\s+/).map(low))
     walk(w.tree, (n, up) => {
-      if (!STATIC_TEXT.has(n.r) || up.length < TILE_UP) return
+      if (!STATIC_TEXT.has(n.r) || up.length < TILE_UP || up.some(isLive)) return
       const text = n.v ?? n.t
       if (!text) return
       const name = meetName(text)
@@ -252,23 +278,82 @@ function readTeams(windows: AxWindow[]): CallReading {
   return { speaking: uniq(speaking), participants: uniq(participants.filter((p) => p.length >= 2)), me }
 }
 
+// ---- Webex desktop app ----
+// The meeting's Participants outline contains participant rows. Older Webex builds expose AXCell rows backed by
+// GenericParticipantListCellView; current builds expose AXRow descriptions. Each describes a name and, when present,
+// "speaking" / "me". With that panel closed, the floating video tile still marks its person as speaking in a fixed
+// English shape; it is safe to use only that explicit mark.
+const WEBEX_SPEAKING_TILE = /^(.+?),\s*,\s*,\s*speaking,\s*Video (?:on|off),?$/i
+const WEBEX_ROSTER = /^participants(?:\s|$)/i
+const WEBEX_PERSON_MARK = /^(?:host|presenter|me|muted|unmuted|speaking|using phone|unverified)$/i
+const webexRowName = (description: string): string | undefined => {
+  const fields = description.normalize('NFKC').split(/\s*[,،]\s*/).filter(Boolean)
+  const status = fields.findIndex((field, i) => i > 0 && WEBEX_PERSON_MARK.test(field))
+  const name = status > 0 ? fields.slice(0, status).join(', ') : undefined
+  return name && !WEBEX_PERSON_MARK.test(name) ? name : undefined
+}
+function readWebex(windows: AxWindow[]): CallReading {
+  const speaking: string[] = [], participants: string[] = []
+  let me: string | null = null
+  for (const w of windows) {
+    walk(w.tree, (n, up) => {
+      if (n.r === 'AXGroup' && n.t) {
+        const tile = WEBEX_SPEAKING_TILE.exec(n.t.normalize('NFKC').trim())
+        if (tile && tile[1].trim().length >= 2 && tile[1].trim().length <= 60) speaking.push(tile[1].trim())
+      }
+      if (!up.some((a) => a.r === 'AXOutline' && WEBEX_ROSTER.test((a.d ?? a.t ?? '').trim()))) return
+      const rowName = n.r === 'AXRow' && n.d ? webexRowName(n.d) : undefined
+      let personRow = !!rowName, name = rowName
+      const labels: string[] = []
+      walk(n, (x) => {
+        if (n.r === 'AXCell' && x.i === 'GenericParticipantListCellView') personRow = true
+        labels.push(...texts(x))
+        if (!name && STATIC_TEXT.has(x.r)) name = x.v ?? x.t
+      })
+      if (!personRow || !name) return
+      name = name.normalize('NFKC').trim()
+      if (name.length < 2 || name.length > 60) return
+      const label = labels.join(', ').normalize('NFKC')
+      participants.push(name)
+      if (/(?:^|[,،]\s*)speaking(?:\s*[,،]|$)/i.test(label)) speaking.push(name)
+      if (/(?:^|[,،]\s*)me(?:\s*[,،]|$)/i.test(label)) me = name
+    })
+  }
+  return { speaking: uniq(speaking), participants: uniq(participants), me }
+}
+
 /** What the call app shows right now */
 export function readCall(kind: CallKind, windows: AxWindow[], o: { talkingClasses?: string[] } = {}): CallReading {
-  return kind === 'zoom' ? readZoom(windows) : kind === 'meet' ? readMeet(windows, o) : readTeams(windows)
+  return kind === 'zoom' ? readZoom(windows) : kind === 'meet' ? readMeet(windows, o) : kind === 'webex' ? readWebex(windows) : readTeams(windows)
 }
 
 /**
  * A short picture of a window's tree for the log, so a real call shows what its app gives: element counts by role,
  * and the first lines of text with their role (and DOM classes on Meet's tiles). Names stay on the Mac (the log does).
  */
+/** words the call apps write themselves: their status, roles, lists and controls. Anything else may be a name, a caption
+ * or a document title, and stays out of the log */
+const APP_WORDS = new Set([...ZOOM.flat().map(low), ...TALKING.map(low), 'zoom meeting', 'zoom webinar', 'meeting', 'meet', 'microsoft teams',
+  'you', 'leave', 'leave call', 'hang up', 'end call', 'mute mic', 'unmute mic', 'mute my audio', 'unmute my audio', 'participants', 'attendees', 'people'])
+const appWord = (x: string) => APP_WORDS.has(low(x)) || OTHER_STATUS.test(x) || TEAMS_STATUS.test(x) || TEAMS_ROLE.test(x) || TEAMS_SAYS.test(x)
+
+/** Text for the log: the app's own words kept, every other piece shown only by its length ("‹10›, Active speaker") */
+export function redact(text: string): string {
+  return text.replace(/\s+/g, ' ').trim().split(/(\s*,\s*|\s+[-–—|]\s+)/).map((part, i) => (i % 2 || !part || appWord(part) ? part : `‹${part.length}›`)).join('').slice(0, 120)
+}
+
+/**
+ * A short picture of the call window for main.log: role counts, then each element's role, id, classes and words.
+ * main.log is pasted into public issues, so names, captions and titles never go in: only the app's own words do.
+ */
 export function summarize(windows: AxWindow[], max = 60): string {
   const roles = new Map<string, number>()
   const lines: string[] = []
   for (const w of windows) {
-    lines.push(`window "${(w.title ?? '').slice(0, 60)}"${w.id ? ` id=${w.id}` : ''}`)
+    lines.push(`window "${redact(w.title ?? '')}"${w.id ? ` id=${w.id}` : ''}`)
     walk(w.tree, (n, up) => {
       roles.set(n.r, (roles.get(n.r) ?? 0) + 1)
-      const said = texts(n).map((x) => x.replace(/\s+/g, ' ').slice(0, 80))
+      const said = texts(n).map(redact)
       if ((said.length || n.i) && lines.length < max) lines.push(`${'  '.repeat(Math.min(up.length, 12))}${n.r}${n.i ? `#${n.i}` : ''} ${said.map((x) => JSON.stringify(x)).join(' ')}${n.c?.length ? ` .${n.c.slice(0, 6).join('.')}` : ''}`)
     })
   }

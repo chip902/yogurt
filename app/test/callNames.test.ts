@@ -1,11 +1,11 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { EventEmitter } from 'node:events'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { openStore, type Meeting, type Store } from '../src/main/store'
 import { hookCallNames, watchIds, type WatchLine } from '../src/main/callNames'
-import type { AxNode } from '../src/main/callNames/parse'
+import { readCall, type AxNode } from '../src/main/callNames/parse'
 
 const dirs: string[] = [], stores: Store[] = []
 afterEach(() => { stores.splice(0).forEach((s) => s.close()); dirs.splice(0).forEach((d) => rmSync(d, { recursive: true, force: true })) })
@@ -18,6 +18,28 @@ const zoomLine = (t: number, people: string[], talking?: string, me?: string): W
   ] } }],
 })
 
+const webexWindows = (): WatchLine['windows'] => [{ title: 'Webex meeting', tree: { r: 'AXWindow', k: [{ r: 'AXOutline', d: 'Participants', k: [
+  { r: 'AXCell', d: 'Participants group, 2 participants', k: [{ r: 'AXUnknown', i: 'GenericParticipantListGroupCellView' }] },
+  { r: 'AXCell', d: 'alex@example.com, Host, presenter, me, Muted, ', k: [
+    { r: 'AXUnknown', i: 'GenericParticipantListCellView', d: 'alex@example.com, Host, presenter, me, Muted, ' },
+    { r: 'AXStaticText', v: 'alex@example.com' }, { r: 'AXStaticText', v: 'Host, presenter, me' },
+  ] },
+  { r: 'AXCell', d: 'Riley Okafor, example.org, speaking, ', k: [
+    { r: 'AXUnknown', i: 'GenericParticipantListCellView', d: 'Riley Okafor, example.org, speaking, ' },
+    { r: 'AXStaticText', v: 'Riley Okafor' }, { r: 'AXStaticText', v: 'example.org' },
+  ] },
+] }] } }]
+const webexFloatingWindows = (): WatchLine['windows'] => [{ title: 'Webex multitasking floating window', tree: { r: 'AXWindow', k: [{
+  r: 'AXGroup', t: 'Riley Okafor, , , speaking, Video off, ', k: [{ r: 'AXStaticText', v: 'Riley Okafor' }],
+}] } }]
+const webexCurrentWindows = (): WatchLine['windows'] => [{ title: 'Webex meeting', tree: { r: 'AXWindow', k: [{ r: 'AXOutline', d: 'Participants', k: [
+  { r: 'AXRow', d: 'Participants group, 3 participant(s)' },
+  { r: 'AXRow', d: 'alex@example.com, Host, presenter, me, Muted,' },
+  { r: 'AXRow', d: 'Jane Doe, using phone, Unverified, speaking,' },
+  { r: 'AXRow', d: 'Host, Muted,' },
+] }] } }]
+const webexLine = (t: number): WatchLine => ({ t, app: 'Cisco-Systems.Spark', windows: webexWindows() })
+
 function setup(o: { app?: string | null; attendees?: Meeting['attendees'] } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'yogurt-callnames-')); dirs.push(root)
   const store = openStore(join(root, 'yogurt.db')); stores.push(store)
@@ -26,7 +48,7 @@ function setup(o: { app?: string | null; attendees?: Meeting['attendees'] } = {}
   const watched: string[][] = []
   let emit!: (l: WatchLine) => void
   let stopped = 0
-  const starts: Array<(m: Meeting) => void> = [], stops: Array<(m: Meeting) => void> = []
+  const starts: Array<(m: Meeting) => void> = [], stops: Array<(m: Meeting) => void> = [], binds: Array<(m: Meeting) => void> = []
   const captures: Array<(c: EventEmitter, id: string) => void> = []
   const changed: string[] = [], logs: string[] = []
   let transcribed!: () => void
@@ -34,7 +56,7 @@ function setup(o: { app?: string | null; attendees?: Meeting['attendees'] } = {}
   const hook = hookCallNames({
     store, myNames: () => ['Alex Morgan'], transcribed: () => done, changed: (id) => changed.push(id), log: (s) => logs.push(s), now: () => clock,
     watch: (ids, onLine) => { watched.push(ids); emit = onLine; return { stop: () => { stopped++ } } },
-    onStart: (fn) => starts.push(fn), onStop: (fn) => stops.push(fn), onCapture: (fn) => captures.push(fn),
+    onStart: (fn) => starts.push(fn), onStop: (fn) => stops.push(fn), onCapture: (fn) => captures.push(fn), onBind: (fn) => binds.push(fn),
   })
   const capture = new EventEmitter()
   return {
@@ -43,6 +65,8 @@ function setup(o: { app?: string | null; attendees?: Meeting['attendees'] } = {}
     /** audio heard: meeting time `ms`, arriving at wall clock `at` */
     audio(ms: number, at: number) { clock = at; capture.emit('pcm', 'them', ms, new Float32Array(1600)) },
     emit: (l: WatchLine) => emit(l),
+    /** the recording learned its call app (CALL bind) */
+    bind(app: string) { binds.forEach((f) => f({ ...store.meeting(m.id)!, app })) },
     stop() { const s = { ...store.meeting(m.id)!, state: 'stopped' as const }; stops.forEach((f) => f(s)) },
   }
 }
@@ -50,9 +74,11 @@ const wait = () => new Promise((r) => setTimeout(r, 10))
 
 describe('watchIds: only the call app the meeting is in', () => {
   it('maps the detected app to its ids (bundle ids on a Mac, program names and Flatpak ids on Linux); no app known: every call app (the first with a call is read)', () => {
-    expect(watchIds('Zoom')).toEqual(['us.zoom.xos', 'zoom', 'us.zoom.Zoom'])
-    expect(watchIds('Teams')).toEqual(['com.microsoft.teams2', 'com.microsoft.teams', 'teams-for-linux', 'com.github.IsmaelMartinez.teams_for_linux'])
-    expect(watchIds('Chrome')).toEqual(['com.google.Chrome', 'chrome', 'google-chrome'])
+    expect(watchIds('Zoom')).toEqual(['us.zoom.xos', 'zoom', 'us.zoom.Zoom', 'zoom.exe'])
+    expect(watchIds('Teams')).toEqual(['com.microsoft.teams2', 'com.microsoft.teams', 'teams-for-linux', 'com.github.IsmaelMartinez.teams_for_linux', 'ms-teams.exe', 'teams.exe'])
+    expect(watchIds('Webex')).toEqual(['Cisco-Systems.Spark', 'com.cisco.webexmeetingsapp'])
+    expect(watchIds('Chrome')).toEqual(['com.google.Chrome', 'chrome', 'google-chrome', 'chrome.exe'])
+    expect(watchIds('Edge')).toContain('msedge.exe')
     expect(watchIds('Safari')).toEqual(['com.apple.Safari'])
     expect(watchIds('FaceTime')).toEqual([])
     expect(watchIds(null)).toContain('us.zoom.xos')
@@ -61,7 +87,52 @@ describe('watchIds: only the call app the meeting is in', () => {
   })
 })
 
+describe('Webex accessibility roster', () => {
+  it('reads legacy AXCell roster names, the speaking mark, and me while ignoring group rows', () => {
+    expect(readCall('webex', webexWindows()!)).toEqual({
+      speaking: ['Riley Okafor'], participants: ['alex@example.com', 'Riley Okafor'], me: 'alex@example.com',
+    })
+  })
+
+  it('reads the marked speaker from the floating video tile when the roster is closed', () => {
+    expect(readCall('webex', webexFloatingWindows()!)).toEqual({ speaking: ['Riley Okafor'], participants: [], me: null })
+  })
+
+  it('reads AXRow roster descriptions from current Webex builds', () => {
+    expect(readCall('webex', webexCurrentWindows()!)).toEqual({
+      speaking: ['Jane Doe'], participants: ['alex@example.com', 'Jane Doe'], me: 'alex@example.com',
+    })
+  })
+})
+
 describe('hookCallNames', () => {
+  it('a recording started by hand watches every call app until its app is known, then only that one (a Teams chat window cannot hide a Meet call, #72)', () => {
+    const s = setup({ app: null })
+    s.start()
+    expect(s.watched[0]).toContain('com.microsoft.teams2')
+    s.bind('Chrome')
+    expect(s.stopped()).toBe(1)
+    expect(s.watched.at(-1)).toEqual(watchIds('Chrome'))
+    // a meeting that knew its app from the start is never watched again
+    const k = setup()
+    k.start(); k.bind('Chrome')
+    expect(k.watched).toHaveLength(1)
+  })
+
+  it('says what it read in main.log (info, which the log file keeps; console.log never reaches it)', () => {
+    const root = mkdtempSync(join(tmpdir(), 'yogurt-callnames-')); dirs.push(root)
+    const store = openStore(join(root, 'yogurt.db')); stores.push(store)
+    const m = store.createMeeting({ title: 'Sync', startedAt: 1_000_000, endedAt: null, eventId: null, app: 'FaceTime', attendees: [], state: 'recording' })
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {})
+    const starts: Array<(m: Meeting) => void> = []
+    try {
+      hookCallNames({ store, myNames: () => [], transcribed: async () => {}, changed: () => {}, watch: () => ({ stop() {} }),
+        onStart: (fn) => starts.push(fn), onStop: () => {}, onCapture: () => {} })
+      starts.forEach((f) => f(m))
+      expect(info.mock.calls.flat().join('\n')).toContain("call names: FaceTime can't be read")
+    } finally { info.mockRestore() }
+  })
+
   it('a resumed session names only new lines and preserves previous speaker labels', async () => {
     const s = setup()
     s.store.addSegments([{ meetingId: s.m.id, track: 'them', startMs: 1000, endMs: 3000, text: 'Prior session.', speaker: 'Ann Lee' }])
@@ -75,7 +146,7 @@ describe('hookCallNames', () => {
   it('reads the meeting\'s app while it records, and a line of the other side gets the name talking then', () => {
     const s = setup()
     s.start()
-    expect(s.watched).toEqual([['us.zoom.xos', 'zoom', 'us.zoom.Zoom']])
+    expect(s.watched).toEqual([['us.zoom.xos', 'zoom', 'us.zoom.Zoom', 'zoom.exe']])
     // meeting time 0 was heard at 1_005_000 (the 100 ms of audio arrived 100 ms after it started)
     s.audio(0, 1_005_100)
     for (let t = 1_006_000; t < 1_014_000; t += 500) s.emit(zoomLine(t, ['Alex Morgan', 'Dana Smith', 'Ann Lee'], t < 1_010_000 ? 'Dana Smith' : 'Ann Lee'))
@@ -83,6 +154,15 @@ describe('hookCallNames', () => {
     expect(s.hook.nameFor(s.m.id, 1500, 4000)).toBe('Dana Smith')
     expect(s.hook.nameFor(s.m.id, 6000, 8000)).toBe('Ann Lee')
     expect(s.hook.nameFor('other', 1500, 4000)).toBeNull()
+  })
+
+  it('reads Webex roster names during a call', () => {
+    const s = setup({ app: 'Webex' })
+    s.start()
+    expect(s.watched).toEqual([['Cisco-Systems.Spark', 'com.cisco.webexmeetingsapp']])
+    s.audio(0, 1_000_100)
+    for (let t = 1_000_000; t < 1_005_000; t += 500) s.emit(webexLine(t))
+    expect(s.hook.nameFor(s.m.id, 1000, 3000)).toBe('Riley Okafor')
   })
 
   it('after the meeting every line of the other side is named again from the whole timeline; new people join the attendees', async () => {
@@ -104,6 +184,9 @@ describe('hookCallNames', () => {
     expect(s.changed).toEqual([s.m.id])
     // the first reading is pictured in the log, for a real call's data
     expect(s.logs.some((l) => l.includes('AXTabGroup'))).toBe(true)
+    // main.log is pasted into public issues: no one's name reaches it, only counts and shapes
+    for (const name of ['Alex Morgan', 'Dana Smith', 'Ann Lee']) expect(s.logs.join('\n')).not.toContain(name)
+    expect(s.logs.some((l) => /talking 1 of 3/.test(l))).toBe(true)
   })
 
   it('without Accessibility, or with nothing read, every line stays Them and nothing changes', async () => {

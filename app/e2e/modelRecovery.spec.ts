@@ -14,7 +14,7 @@ test('a failed notes-model download explains waiting notes and answers, and retr
     // Controller download/retry/concurrency is covered in setup.test.ts. Exercise the
     // real renderer's existing IPC boundary while fake model work waits in its queue.
     await app.evaluate(({ ipcMain, BrowserWindow }) => {
-      let state = { phase: 'ready', fraction: 1, notesError: 'Not enough disk space. Free up 4 GB and try again.' } as { phase: string; fraction: number; notesError?: string }
+      let state = { phase: 'ready', fraction: 1, notesError: 'The download needs 4 GB more free space.' } as { phase: string; fraction: number; notesError?: string }
       let rejectOnce = true
       ipcMain.removeHandler('setup:state')
       ipcMain.handle('setup:state', () => state)
@@ -34,7 +34,7 @@ test('a failed notes-model download explains waiting notes and answers, and retr
     await page.getByTestId('chat-input').fill('What was decided?')
     await page.getByTestId('chat-input').press('Enter')
     const chatError = page.getByTestId('chat-turn').last().getByTestId('notes-model-error')
-    await expect(chatError).toContainText('Free up 4 GB')
+    await expect(chatError).toContainText('needs 4 GB more free space')
     await expect(chatError.getByTestId('notes-model-retry')).toHaveCSS('text-decoration-line', 'underline')
     await expect(chatError).toHaveAttribute('role', 'status')
     await expect(page.locator('.ask-conversation')).toHaveAttribute('aria-busy', 'false')
@@ -61,18 +61,18 @@ test('a failed notes-model download explains waiting notes and answers, and retr
     await page.getByTestId('note-summary-tab').click()
     await page.getByTestId('chat-close').click()
     await expect(page.getByTestId('notes-model-error')).toHaveCount(1)
-    await expect(page.getByTestId('notes-model-error')).toContainText('Free up 4 GB')
+    await expect(page.getByTestId('notes-model-error')).toContainText('needs 4 GB more free space')
     await expect(page.getByTestId('notes-model-retry')).toHaveCSS('text-decoration-line', 'underline')
     await expect(page.getByTestId('note-enhanced-waiting')).toHaveCount(0)
     // A rejected Retry request remains visible and retryable instead of escaping the click handler.
     await page.getByTestId('notes-model-retry').click()
-    await expect(page.getByTestId('notes-model-error')).toContainText("Couldn't restart the download. Try again.")
+    await expect(page.getByTestId('notes-model-error')).toContainText("Yogurt couldn't restart the download.")
     await expect(page.getByTestId('notes-model-retry')).toBeEnabled()
     await page.getByTestId('chat-open').click()
     await expect(chatError).toBeVisible()
     await chatError.getByTestId('notes-model-retry').click()
     await expect(page.getByTestId('notes-model-error')).toHaveCount(0)
-    await expect(page.getByTestId('note-enhanced-model-download').or(page.getByTestId('note-enhanced-waiting'))).toContainText(/still downloading its AI model|Generating notes/)
+    await expect(page.getByTestId('note-enhanced-model-download').or(page.getByTestId('note-enhanced-waiting'))).toContainText(/waiting for Yogurt's AI to download|Reading the transcript/)
     await expect(page.getByTestId('note-enhanced')).toHaveAttribute('data-status', 'done', { timeout: 45_000 })
     await expect(page.getByTestId('chat-turn').last()).toContainText('Tuesday', { timeout: 30_000 })
     await expect(page.getByTestId('chat-turn').first()).toHaveAttribute('data-status', 'stopped')

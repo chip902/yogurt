@@ -86,6 +86,7 @@ describe('conversations across meetings', () => {
     expect(order.filter((m, i) => i === 0 || m !== order[i - 1])).toHaveLength(new Set(order).size)
     expect(t.prompts[0].match(/^Meeting: /gm)).toHaveLength(2)
     expect(new Set(turn.sources.map((s) => s.meetingId)).size).toBe(2)
+    expect(t.views.filter(v => v.id === id).map(v => v.turns[0]?.step)).toContainEqual({ kind: 'reading', meetings: 2, title: turn.sources[0].title })
     // [1][2] [3] cite at most two meetings: one citation each
     const cited = turn.answer.match(/\[([\d, ]+)\]/)![1].split(', ').map(Number)
     expect(new Set(cited.map((n) => turn.sources[n - 1].meetingId)).size).toBe(cited.length)
@@ -210,6 +211,9 @@ it('an empty chip scope never reads unrelated meetings, while folder and meeting
   expect(t.chats.view(id)).toMatchObject({ chips: [{ kind: 'folder', id: folder.id }, { kind: 'meeting', id: prepared.id }], draftChips: [] })
   expect(t.prompts.at(-1)).toContain('Twenty dollars a seat')
   expect(t.prompts.at(-1)).toContain('October budget')
+  const scopes = [[{ kind: 'folder', id: folder.id, title: 'Project' }], [{ kind: 'folder', id: folder.id, title: 'Project' }, { kind: 'meeting', id: prepared.id, title: 'Prep' }]]
+  expect(t.chats.view(id)!.turns.map(turn => turn.scope)).toEqual(scopes)
+  expect(hookConversations(t.deps).view(id)!.turns.map(turn => turn.scope)).toEqual(scopes)
 })
 
 it('does not acknowledge and discard a draft when its conversation is deleted or already answering', async () => {

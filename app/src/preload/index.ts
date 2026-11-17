@@ -183,6 +183,7 @@ const api: YogurtApi = {
   calendar: {
     list: () => ipcRenderer.invoke('calendar:list'),
     setEnabled: (id, enabled) => ipcRenderer.invoke('calendar:set-enabled', id, enabled),
+    setHideWithoutLink: (hide) => ipcRenderer.invoke('calendar:set-hide-without-link', hide),
     onChange: (cb) => { ipcRenderer.on('calendar:changed', cb); return () => { ipcRenderer.off('calendar:changed', cb) } },
     comingUp: () => ipcRenderer.invoke('calendar:coming-up'),
     connect: () => ipcRenderer.invoke('calendar:connect'),
@@ -225,6 +226,7 @@ const api: YogurtApi = {
     get: () => ipcRenderer.invoke('settings:get'),
     setTheme: (v) => ipcRenderer.invoke('settings:theme', v),
     setShowInMenuBar: (on) => ipcRenderer.invoke('settings:menu-bar', on),
+    setAppVisibility: (choice) => ipcRenderer.invoke('settings:visibility', choice),
     setOpenAtLogin: (on) => ipcRenderer.invoke('settings:login', on),
     setName: (name) => ipcRenderer.invoke('settings:name', name),
     setStopWhenCallEnds: (on) => ipcRenderer.invoke('settings:auto-stop', on),
@@ -232,6 +234,7 @@ const api: YogurtApi = {
     setKeepRecordings: (on) => ipcRenderer.invoke('settings:keep-recordings', on),
     setJargon: (terms) => ipcRenderer.invoke('settings:jargon', terms),
     setLanguage: (id) => ipcRenderer.invoke('settings:language', id),
+    setSummaryLanguage: (id) => ipcRenderer.invoke('settings:summary-language', id),
     onLanguage: (cb) => { const f = (_e: unknown, locale: string) => cb(locale); ipcRenderer.on('settings:language', f); return () => { ipcRenderer.off('settings:language', f) } },
     setSpoken: (v) => ipcRenderer.invoke('settings:spoken', v),
   },

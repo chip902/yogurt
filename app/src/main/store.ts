@@ -253,6 +253,15 @@ export class Store {
     if (this.db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'speakers'").get()) {
       this.db.exec("UPDATE segments SET speaker = NULL WHERE track = 'them'; DROP TABLE speakers")
     }
+    // Meetings recorded before transcripts were tracked (0.3.15) were never marked as waiting: a finished one with not
+    // one line is marked once, so a recording made before the speech model was in gets transcribed (#30). Once only: a
+    // meeting that really had nothing to transcribe is not tried on every launch. Version 1 (0.3.31) marked stopped
+    // meetings only; one whose empty notes were written is done, so version 2 marks those too.
+    if (Number((this.db.prepare('PRAGMA user_version').get() as Row).user_version) < 2) {
+      this.db.exec(`UPDATE meetings SET transcription_pending = 1 WHERE state IN ('stopped', 'done') AND trashed_at IS NULL
+        AND NOT EXISTS (SELECT 1 FROM segments s WHERE s.meeting_id = meetings.id)`)
+      this.db.exec('PRAGMA user_version = 2')
+    }
   }
   private readMeeting(r: Row): Meeting {
     const m = toMeeting(r)
@@ -471,6 +480,15 @@ export class Store {
   }
   setWrittenWith(meetingId: string, people: string) {
     this.db.prepare('UPDATE notes SET written_with = ? WHERE meeting_id = ?').run(people, meetingId)
+  }
+
+  /**
+   * Finished meetings (stopped, or done once their notes were written) still waiting for their transcript with not one line of it: recorded before the speech model was in
+   * (#30), oldest first. One with some lines (whisper fell over partway) is left alone, so no line is transcribed twice.
+   */
+  untranscribedMeetings(): Meeting[] {
+    return (this.db.prepare(`SELECT * FROM meetings m WHERE state IN ('stopped', 'done') AND trashed_at IS NULL AND transcription_pending = 1
+      AND NOT EXISTS (SELECT 1 FROM segments s WHERE s.meeting_id = m.id) ORDER BY started_at`).all() as Row[]).map(r => this.readMeeting(r))
   }
 
   /** Stopped meetings with no enhanced notes: a quit or crash came before they were written */

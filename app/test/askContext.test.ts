@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { openStore, type Store } from '../src/main/store'
-import { Library, migrateMeetingChats } from '../src/main/library/store'
+import { Library, libraryTables, migrateMeetingChats } from '../src/main/library/store'
 import { mergeBackup } from '../src/main/backup'
 import { askDestination, attachContext, chipScope, contextKey, mentionAt } from '../src/shared/askContext'
 
@@ -210,4 +210,60 @@ it('resolves current meeting and folder titles, showing the same title as the no
   s.updateMeeting(m.id, { title: 'Meeting', titleSource: 'user' })
   expect(l.describe(chips)[0].title).toBe('Meeting')
   expect(l.describe([{ kind: 'meeting', id: 'missing' }])[0].title).toBe('')
+})
+
+it('returns matches for renderer expansion, with recent folders first only for a bare @', () => {
+  const { store, library } = fresh()
+  const ms = Array.from({ length: 12 }, (_, i) => store.createMeeting({ title: `Plan ${i}`, startedAt: 1000 + i, endedAt: 2000 + i, state: 'done', eventId: null, app: null, attendees: [] }))
+  const folders = ['Plans A', 'Plans B', 'Plans C', 'Plans D', 'Plans E'].map(name => store.createFolder(name))
+  store.addToFolder(folders[4].id, ms[0].id)
+  const bare = library.targets('')
+  expect(bare.filter(c => c.kind === 'meeting')).toHaveLength(12)
+  expect(bare.filter(c => c.kind === 'folder')).toHaveLength(5)
+  expect(bare.slice(0, 3).map(c => c.title)).toEqual(['Plan 11', 'Plan 10', 'Plan 9'])
+  expect(bare.filter(c => c.kind === 'folder')[0].title).toBe('Plans E')
+  const typed = library.targets('plan')
+  expect(typed.filter(c => c.kind === 'folder').map(c => c.title)).toEqual(['Plans A', 'Plans B', 'Plans C', 'Plans D', 'Plans E'])
+  expect(typed.filter(c => c.kind === 'meeting')).toHaveLength(12)
+})
+
+it('returns all available meetings when there are no folders', () => {
+  const { store, library } = fresh()
+  for (let i = 0; i < 8; i++) meeting(store, `Call ${i}`)
+  expect(library.targets('').map(c => c.kind)).toEqual(Array(8).fill('meeting'))
+})
+
+it('limits matching targets to 40 of each kind before renderer caps', () => {
+  const { store, library } = fresh()
+  for (let i = 0; i < 45; i++) { meeting(store, `Plan ${i}`); store.createFolder(`Plan ${i}`) }
+  for (const query of ['', 'plan']) {
+    const targets = library.targets(query)
+    expect(targets.filter(c => c.kind === 'meeting')).toHaveLength(40)
+    expect(targets.filter(c => c.kind === 'folder')).toHaveLength(40)
+  }
+  expect(library.targets('no match')).toEqual([])
+})
+
+
+it('snapshots the merged scope and names per turn, retaining all-meetings and legacy distinctions through backup', () => {
+  const { store: s, library: l, file } = fresh()
+  const m = meeting(s, 'Release review'), f = s.createFolder('Planning')
+  const a = { kind: 'meeting' as const, id: m.id }, b = { kind: 'folder' as const, id: f.id }
+  const id = l.current([a])
+  l.addTurn(id, 'Earlier question')
+  s.db.exec('ALTER TABLE conversation_turns DROP COLUMN scope')
+  libraryTables(s.db)
+  expect(l.turns(id)[0].scope).toBeUndefined()
+  l.setContext(id, [b])
+  l.addTurn(id, 'Search both')
+  const scope = [{ ...a, title: 'Release review' }, { ...b, title: 'Planning' }]
+  expect(l.turns(id)[1].scope).toEqual(scope)
+  s.updateMeeting(m.id, { title: 'Renamed review' })
+  l.removeContext(id, a); l.removeContext(id, b)
+  l.addTurn(id, 'Search everything')
+  expect(l.turns(id).map(turn => turn.scope)).toEqual([undefined, scope, []])
+  const reopened = openStore(file); stores.push(reopened)
+  expect(new Library(reopened.db).turns(id).map(turn => turn.scope)).toEqual([undefined, scope, []])
+  const target = fresh(); mergeBackup(target.store.db, s.db)
+  expect(target.library.turns(id).map(turn => turn.scope)).toEqual([undefined, scope, []])
 })

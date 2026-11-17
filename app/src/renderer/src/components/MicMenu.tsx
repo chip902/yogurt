@@ -23,7 +23,7 @@ const FELL_BACK_MS = 8000
 export function MicMenu({ recording, paused }: { recording: boolean; paused?: boolean }) {
   const [view, setView] = useState<MicsView>()
   const [open, setOpen] = useState<false | 'pointer' | 'keyboard'>(false)
-  const presence = usePopoverPresence(open, open === 'pointer')
+  const presence = usePopoverPresence(open)
   /** the mic that went away, for the note saying Auto took over */
   const [lost, setLost] = useState<string | null>(null)
   const root = useRef<HTMLDivElement>(null)
@@ -92,7 +92,7 @@ export function MicMenu({ recording, paused }: { recording: boolean; paused?: bo
       </button>
       {lost !== null && (
         <span data-testid="rec-mic-note" role="status" className="text-ink">
-          {lost ? t("{name} isn't available anymore. Recording continues with Auto.", { name: lost }) : t("Your mic isn't available anymore. Recording continues with Auto.")}
+          {t('The selected microphone is unavailable, so recording is using your system microphone.')}
         </span>
       )}
       {presence.value && view && (

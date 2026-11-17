@@ -26,7 +26,7 @@ it('keeps both composers busy through thinking and streaming, then releases on e
     expect(form).toBeTruthy()
     expect(form!.includes('data-busy="true"')).toBe(busy)
     expect(form).not.toContain('data-thinking')
-    expect(html).toContain('class="ask-border" aria-hidden="true"')
+    expect(html).not.toContain('ask-border')
     expect(html).toContain('A follow-up')
   }
 })
@@ -66,4 +66,15 @@ it('retains typing across pending-ID handoff and failed persistence without carr
   expect(render('resolved-draft').value).toBe('Keep these first keystrokes')
   expect(render('new-conversation').value).toBe('')
   if (typeof cleanup === 'function') cleanup()
+})
+
+it('keeps the landing input labeled without repeating its heading as a placeholder', () => {
+  vi.stubGlobal('window', { matchMedia: () => ({ matches: false }) })
+  const initial: ConversationView = { id: 'landing-copy', title: '', chips: [], draft: '', draftChips: [], firstChips: null,
+    turns: [], waitsForMeeting: false, waitsForModel: false }
+  const html = renderToStaticMarkup(createElement(AskConversation, { id: initial.id, initial, home: true, onSelect() {}, onDeleted() {}, onSource() {} }))
+  expect(html).toContain('class="ask-home-title">Ask about your meetings</h1>')
+  const input = html.match(/<textarea[^>]*>/)?.[0]
+  expect(input).toContain('aria-label="Ask about your meetings"')
+  expect(input).not.toContain('placeholder=')
 })

@@ -12,7 +12,7 @@ type Feedback = { text: string; kind: 'copied' | 'saved' | 'notice' | 'error' }
 /** Copy choices stay beside the meeting controls. Saving before use protects the latest edits. */
 export function ShareMenu({ id, shown, status, hasEnhanced, beforeUse }: { id: string; shown: 'mine' | 'enhanced'; status: NoteStatus; hasEnhanced: boolean; beforeUse: () => Promise<boolean> }) {
   const [open, setOpen] = useState<false | 'pointer' | 'keyboard'>(false)
-  const presence = usePopoverPresence(open, open === 'pointer')
+  const presence = usePopoverPresence(open)
   const [said, setSaid] = useState<Feedback>()
   const root = useRef<HTMLDivElement>(null)
   const button = useRef<HTMLButtonElement>(null)
@@ -107,7 +107,7 @@ export function ShareMenu({ id, shown, status, hasEnhanced, beforeUse }: { id: s
             <Copy size={15} strokeWidth={1.75} aria-hidden="true" className="text-muted" />{t('Copy transcript')}
           </button>
           <button ref={(el) => { items.current[3] = el }} role="menuitem" data-testid="share-export" onClick={() => run(() => void save())} className={row}>
-            <FileDown size={15} strokeWidth={1.75} aria-hidden="true" className="text-muted" />{t('Export as Markdown…')}
+            <FileDown size={15} strokeWidth={1.75} aria-hidden="true" className="text-muted" />{t('Export Markdown…')}
           </button>
         </div>
       )}

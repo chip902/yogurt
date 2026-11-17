@@ -470,9 +470,25 @@ final class Mic {
     return err == noErr
   }
 
+  /// The input unit doesn't convert rates: its client side keeps the last mic's rate (48 kHz), and a mic running at
+  /// another (a Scarlett Solo at 44.1 or 96 kHz) then won't start, error -10868 (format not supported).
+  private func matchRate(_ au: AudioUnit) {
+    var hw = AudioStreamBasicDescription(), client = AudioStreamBasicDescription()
+    var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
+    guard AudioUnitGetProperty(au, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input, 1, &hw, &size) == noErr, hw.mSampleRate > 0 else { return }
+    size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
+    guard AudioUnitGetProperty(au, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output, 1, &client, &size) == noErr,
+          client.mSampleRate != hw.mSampleRate else { return }
+    log("the microphone runs at \(Int(hw.mSampleRate)) Hz, not \(Int(client.mSampleRate)): following it")
+    client.mSampleRate = hw.mSampleRate
+    let err = AudioUnitSetProperty(au, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output, 1, &client, size)
+    if err != noErr { log("couldn't set the microphone's rate: \(err)") }
+  }
+
   /// the tap, in the input's format now (a new output device can change its rate)
   private func tap(_ e: AVAudioEngine) -> Bool {
     let input = e.inputNode
+    if let au = input.audioUnit { matchRate(au) }
     // the microphone's own format now: after a switch (a headset in hands-free mode at 16 kHz, then the Mac's own mic)
     // the node's remembered format can be the old one, and a tap asking for it threw an exception that ended the
     // recorder (issue #27). nil takes the bus's format as it is, and each buffer says its own rate.
@@ -659,6 +675,8 @@ final class Recorder {
   var paused = false, finishing = false, sysAllowed = true
   var timer: DispatchSourceTimer?
   var micRebuild: DispatchWorkItem?, sysRebuild: DispatchWorkItem?
+  /// mic starts that failed in a row (retryMic)
+  var micTries = 0
   /// the microphone the person chose (its UID); nil is Auto, the Mac's default input, followed as it changes
   var micUID: String? = argValue("--mic")
   /// Apple's live speech per track (macOS 26, when asked for with --speech), as Any so older Macs never see the type
@@ -705,7 +723,7 @@ final class Recorder {
     // a remembered mic that isn't here today: Auto, quietly (nothing was lost mid-meeting)
     if let uid = micUID, micDevice(uid: uid) == nil { log("the chosen microphone isn't here: using the Mac's"); micUID = nil }
     mic.device = micUID.flatMap(micDevice)
-    if !mic.start() { log("recording without the microphone") }
+    if !mic.start() { log("recording without the microphone for now: trying again"); retryMic() }
     if mic.device == nil { micUID = nil }
     reportMic()
     startSystem()
@@ -783,7 +801,12 @@ final class Recorder {
       }
       self.mic.stop(); self.me.resync()
       self.mic.device = self.micUID.flatMap(micDevice)
-      if !self.mic.start() { log("microphone lost") }
+      guard self.mic.start() else {
+        // the log keeps the first few tries; a mic that never comes back would otherwise fill it every 5 seconds
+        if self.micTries < 3 { log("microphone lost") }
+        self.retryMic(); return
+      }
+      self.micTries = 0
       // the chosen mic can't be recorded from: Auto, and the picker is told
       if self.micUID != nil && self.mic.device == nil { self.micUID = nil; send(["t": "warn", "code": "mic-gone"]) }
       send(["t": "warn", "code": "device-changed"])
@@ -791,6 +814,15 @@ final class Recorder {
     }
     micRebuild = item
     work.asyncAfter(deadline: .now() + delay, execute: item)
+  }
+  /// A mic that wouldn't start (macOS refused its format while a call app like Teams was still setting it up, #26):
+  /// tried again after 1, 2, 4, then every 5 seconds for as long as the recording runs, so your side isn't lost for the
+  /// whole meeting. A chosen mic that keeps failing gives way to the Mac's default.
+  func retryMic() {
+    guard !finishing else { return }
+    micTries += 1
+    if micTries >= 2, micUID != nil { log("the chosen microphone won't start: using the Mac's"); micUID = nil; send(["t": "warn", "code": "mic-gone"]) }
+    rebuildMic(after: min(5, pow(2, Double(micTries - 1))))
   }
   /// Which mic records now, for the picker: the chosen one, or Auto with the default's name
   func reportMic() {
@@ -1096,6 +1128,19 @@ if args.count >= 3, args[1] == "speech-clock", let rate = Double(args[2]) {
   exit(0)
 }
 // Local measurement only: a 16 kHz mono wav through Apple's speech in LOCALE, final lines as speech frames on stdout
+// A recording made before the speech model was in, transcribed later (#30): the file as 16 kHz mono float32
+// (little-endian) on stdout, nothing else. One converter for the whole file, so its filter carries across buffers.
+if args.count >= 3, args[1] == "decode" {
+  guard let f = try? AVAudioFile(forReading: URL(fileURLWithPath: args[2])), let conv = AVAudioConverter(from: f.processingFormat, to: mono16) else { fail("can't read \(args[2])") }
+  let out = FileHandle.standardOutput
+  while let b = AVAudioPCMBuffer(pcmFormat: f.processingFormat, frameCapacity: 48000), (try? f.read(into: b)) != nil, b.frameLength > 0 {
+    autoreleasepool {
+      // the reader gone (Yogurt quit or gave up): stop quietly
+      if let m = convert(conv, b), m.frameLength > 0, (try? out.write(contentsOf: Data(bytes: m.floatChannelData![0], count: Int(m.frameLength) * MemoryLayout<Float>.size))) == nil { exit(0) }
+    }
+  }
+  exit(0)
+}
 if args.count >= 4, args[1] == "speech-file" {
   #if compiler(>=6.2)
   guard #available(macOS 26, *) else { fail("speech-file needs macOS 26") }

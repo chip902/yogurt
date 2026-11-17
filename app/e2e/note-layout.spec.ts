@@ -90,7 +90,7 @@ test('Copy beside the meeting controls offers explicit versions and export', asy
     await finished(app, page)
     await expect(page.locator('.note-header').getByTestId('share-button')).toHaveText('Copy')
     await page.getByTestId('share-button').click()
-    await expect(page.getByTestId('share-menu').getByRole('menuitem')).toHaveText([/Copy my notes/, /Copy summary/, /Copy transcript/, /Export as Markdown/])
+    await expect(page.getByTestId('share-menu').getByRole('menuitem')).toHaveText([/Copy my notes/, /Copy summary/, /Copy transcript/, /Export Markdown/])
     await page.keyboard.press('Escape')
     await expect(page.getByTestId('share-menu')).toHaveCount(0)
     await page.getByTestId('share-button').click()
@@ -113,7 +113,7 @@ test('My notes and Summary tabs switch versions; summary actions regenerate', as
     await expect(page.getByTestId('note-notes-tab')).toHaveAttribute('data-version', 'mine')
     await page.getByTestId('note-view-menu').click()
     await page.getByTestId('note-write-again').click()
-    // written again from My notes: the enhanced notes are shown as they come
+    // The previous summary stays dimmed while reading, then the replacement writes in.
     await expect(page.getByTestId('note-notes-tab')).toHaveAttribute('data-version', 'enhanced')
     await expect(page.getByTestId('note-enhanced')).toHaveAttribute('data-status', 'writing', { timeout: 30_000 })
     await expect(page.getByTestId('note-enhanced')).toHaveAttribute('data-status', 'done', { timeout: 30_000 })
@@ -174,7 +174,7 @@ test('people changed on edited notes: they are kept, and Yogurt offers to write 
     await page.getByTestId('people-add-open').click()
     await page.getByTestId('people-add').fill('Maya Chen')
     await page.keyboard.press('Enter')
-    await expect(page.getByTestId('note-people-changed')).toHaveText(/People changed\. Regenerate summary\?/, { timeout: 10_000 })
+    await expect(page.getByTestId('note-people-changed')).toHaveText(/The attendee list has changed\./, { timeout: 10_000 })
     await expect(editor.locator('h2').first()).toHaveText('Launch plan (mine)')
   } finally { await app.close() }
 })

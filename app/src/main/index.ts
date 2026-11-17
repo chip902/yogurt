@@ -5,6 +5,7 @@ import { speakerColor } from '../shared/speakerColors'
 import { createNotificationPermission } from './notificationPermission'
 import { createRecordingReminder } from './recordingReminder'
 import { closeAction, keepMainWindow } from './mainWindow'
+import { setDockVisible } from './dock'
 import { titleBarOverlay, windowChrome } from './windowChrome'
 import { x11Relaunch } from './display'
 import { isAppRoute } from '../shared/routes'
@@ -18,7 +19,7 @@ import { basename, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { isFake, userDataDir } from './paths'
 import { logToFile } from './log'
-import { loadSettings, localeOf, keepsRecording, recordingReminderOn, spokenSetting, stopsWhenCallEnds, updateSettings } from './settings'
+import { loadSettings, localeOf, keepsRecording, recordingReminderOn, spokenSetting, stopsWhenCallEnds, updateSettings, visibilityOf, summaryLanguageSetting } from './settings'
 import { CALL_GONE_MS, useCallApps } from './detect'
 import { systemLocale } from './locale'
 import { language as uiLanguage, onLanguage, setLanguage, t } from '../shared/i18n'
@@ -42,14 +43,14 @@ import { calendars, eventIds, matchesEvent, setCalendarSelection, calendarStatus
 import { createSignals } from './detectSignals'
 import { Watcher } from './watch'
 import { createPrompts } from './prompts'
-import { activeMeeting, bindMeetingApp, getMeeting, initMeetings, onMeetingChange, onMeetingStart, onMeetingStop, onMeetingStopSaved, refreshEventSnapshots, linkEvent, unlinkEvent, prepareMeeting, startPreparedMeeting, resumeMeeting, pauseMeetingClock, renameMeeting, retryStopSave, setAttendees, startMeeting, stopMeeting, stopSavePending, withStopState } from './meeting'
+import { activeMeeting, bindMeetingApp, getMeeting, initMeetings, onMeetingBound, onMeetingChange, onMeetingStart, onMeetingStop, onMeetingStopSaved, refreshEventSnapshots, linkEvent, unlinkEvent, prepareMeeting, startPreparedMeeting, resumeMeeting, pauseMeetingClock, renameMeeting, retryStopSave, setAttendees, startMeeting, stopMeeting, stopSavePending, withStopState } from './meeting'
 import { deleteMeeting } from './deleteMeeting'
 import { emptyTrash, moveToTrash, purgeTrash } from './trash'
 import { isId, text } from './ipcArgs'
 import { hookMics } from './mics'
 import { activeCapture, audioHelperPath, hookCapture, joinParts, onCaptureStart, onRecordingEvent, prepareAppend, recordingFinished, recordingPaused, recordingSettled, rejoinInterrupted, setRecordingPaused, settleRecording, tell, type WarnCode } from './capture'
 import { createWidget } from './widget'
-import { hookTranscription, onWhisperGpuOff, meetingLanguage, settleTranscription, speechLocaleFor, spokenChanged, transcriptionBacklogMs, stopTranscriptionServer, transcriptFinished, transcriptPartials } from './asr'
+import { hookTranscription, transcribeRecorded, onWhisperGpuOff, meetingLanguage, settleTranscription, speechLocaleFor, spokenChanged, transcriptionBacklogMs, stopTranscriptionServer, transcriptFinished, transcriptPartials } from './asr'
 import { hookCallNames, type Watch } from './callNames'
 import { helperWatch, killAllWatches } from './callNames/watch'
 import { macFullName } from './user'
@@ -75,6 +76,7 @@ import { hookMcp } from './mcp'
 import { startedHidden } from './mcp/paths'
 import { deleteRecording } from './deleteRecording'
 import { AUDIO_SCHEME, audioExts, createAudioHandler, trackFile, type AudioExt } from './audio'
+import { helperDecode, wavDecode } from './asr/backfill'
 import { finishQuit, hookUpdates, isPreviewBuild, updateOfferChanged, updatesOn } from './updates'
 import type { NoteSaveResult, StartResult } from '../shared/types'
 
@@ -246,8 +248,8 @@ let relaunched = 0
 /** fake mode: how many times Yogurt would have restarted to install a new version */
 let updateRestarts = 0
 
-async function readCalendar(from: number, to: number): Promise<CalEvent[]> {
-  const events = await upcoming(from, to)
+async function readCalendar(from: number, to: number, keep?: (event: CalEvent) => boolean): Promise<CalEvent[]> {
+  const events = await upcoming(from, to, keep)
   refreshEventSnapshots(events)
   return events
 }
@@ -263,7 +265,7 @@ async function comingUp(): Promise<CalEvent[]> {
 async function eventsOn(at: number): Promise<CalEvent[]> {
   const from = new Date(at); from.setHours(0, 0, 0, 0)
   const to = new Date(from); to.setDate(to.getDate() + 1)
-  return (await readCalendar(from.getTime(), to.getTime())).sort((a, b) => a.start - b.start)
+  return (await readCalendar(from.getTime(), to.getTime(), event => eventIds(event).some(id => !!storeRef?.meetingForEvent(id)))).sort((a, b) => a.start - b.start)
 }
 
 /** the Mac's full name: who "You" is unless Settings says otherwise (fake mode: a fixed one) */
@@ -455,6 +457,10 @@ app.whenReady().then(() => {
   // Local Electron launches need the same Dock icon as the packaged application.
   if (!app.isPackaged && process.platform === 'darwin') app.dock?.setIcon(join(__dirname, '../../build/icon.png'))
   const settings = loadSettings(join(userDataDir(), 'settings.json'))
+  // a settings file edited by hand can leave no visible entry point: heal it before the window shows
+  const visible = visibilityOf(settings)
+  if (visible.showInDock && settings.showInDock === false) updateSettings(join(userDataDir(), 'settings.json'), { showInDock: undefined })
+  setDockVisible(visible.showInDock)
   // the theme picked in Settings; the system's when none
   nativeTheme.themeSource = settings.theme ?? 'system'
   setLanguage(localeOf(settings, systemLocale()))
@@ -467,11 +473,12 @@ app.whenReady().then(() => {
   // a moved or reinstalled Yogurt loses its login item: put it back if the person wanted it
   if (!isFake()) syncLoginItem(settings.openAtLogin)
   hookPreferences({
-    file: join(userDataDir(), 'settings.json'), permissions, kinds: supportedKinds(caps),
+    file: join(userDataDir(), 'settings.json'), permissions, kinds: supportedKinds(caps), os: platform,
     // fake mode asks the first-run questions only when a test sets the permissions
     ask: !isFake() || !!process.env.YOGURT_FAKE_PERMISSIONS,
     setLogin: (on) => { if (!isFake()) setLoginItem(on) },
     setTrayVisible: (on) => setTrayVisible(on),
+    setDockVisible: (on) => setDockVisible(on, win),
     loginOn: (saved) => (isFake() ? !!saved : loginItemOn(saved)),
     macName,
     // never mid-meeting: quitting would end the recording
@@ -504,7 +511,7 @@ app.whenReady().then(() => {
   initMeetings(store)
   // the person's own names, never given to the other side: the one in Settings and the Mac's
   const settingsFile = join(userDataDir(), 'settings.json')
-  setCalendarSelection(() => loadSettings(settingsFile).hiddenCalendarIds ?? [])
+  setCalendarSelection(() => loadSettings(settingsFile))
   const me = () => loadSettings(settingsFile).myName?.trim() || macName()
   setOwnerName(me)
   setJargon(() => cleanJargon(loadSettings(settingsFile).jargon))
@@ -514,7 +521,7 @@ app.whenReady().then(() => {
     transcribed: async (id) => { await recordingFinished(id); await transcriptFinished(id) },
     // people seen in the call joined the meeting: unedited notes already written get written again for them
     changed: (id) => { win?.webContents.send('transcript:speakers', id); sendWidgetTranscript('transcript:speakers', id); win?.webContents.send('meetings:changed'); notes.applyPeople(id) },
-    onStart: onMeetingStart, onStop: onMeetingStop, onCapture: onCaptureStart,
+    onStart: onMeetingStart, onStop: onMeetingStop, onCapture: onCaptureStart, onBind: onMeetingBound,
   })
   // Windows and Linux: whisper left the graphics card in a meeting, so the speed check (timed with it) runs again next start
   onWhisperGpuOff(() => speedStore(speedFile()).forget())
@@ -604,6 +611,7 @@ app.whenReady().then(() => {
     summarized: id => { folderSuggestions.schedule(id); void removeRecording(id, true) },
     // Windows and Linux: a note waiting while the model loads says so (a Mac shows what it always did)
     showLoading: platform !== 'darwin',
+    summaryLanguage: () => summaryLanguageSetting(loadSettings(settingsFile)),
     store, queue, model, language: meetingLanguage, onStop: onMeetingStopSaved, named: (id) => callNames.finished(id), earlier: (id) => readAhead.parts(id), me,
     transcribed: async (id) => { await recordingFinished(id); await transcriptFinished(id) },
     send: (v) => win?.webContents.send('notes:changed', v),
@@ -746,6 +754,42 @@ app.whenReady().then(() => {
   // and meetings not in the library yet (or changed since) are indexed, once nothing else is waiting
   const catchUp = () => { if (!caughtUp && setup.state.phase === 'ready') { caughtUp = true; void rejoined.catch(e => console.warn('audio startup repair retained its files', e)).finally(() => { notes.recover(); folderSuggestions.refresh(); void indexer.schedule() }) } }
   setup.onState(catchUp)
+  // meetings recorded before the speech model was in (#30): transcribed from their saved recording once it is, one at
+  // a time and never while recording (a new recording pauses it; it carries on after)
+  const ownAudio = isFake() ? '.wav' : process.platform === 'darwin' ? '.m4a' : '.ogg'
+  let backfilling = false
+  const transcribeWaiting = async () => {
+    if (backfilling || !setup.installed()?.asr || activeMeeting()) return
+    backfilling = true
+    try {
+      await rejoined.catch(() => {})
+      for (const m of store.untranscribedMeetings()) {
+        if (activeMeeting()) break
+        // the recorder may still be closing its files (the model came in during this very meeting)
+        await recordingSettled(m.id)
+        const tracks: Partial<Record<'me' | 'them', AsyncIterable<Float32Array>>> = {}
+        for (const t of ['me', 'them'] as const) {
+          const file = trackFile(meetingDir(m.id), t, audioKinds)
+          if (file?.endsWith(ownAudio)) tracks[t] = isFake() ? wavDecode(file) : helperDecode(audioHelperPath(), file)
+        }
+        if (!Object.keys(tracks).length) continue
+        console.info('ASR', `transcribing ${m.id} from its recording: it was recorded before the speech model was in`)
+        const done = await transcribeRecorded(m.id, tracks, () => !!activeMeeting())
+        win?.webContents.send('meetings:changed'); win?.webContents.send('transcript:speakers', m.id)
+        // notes that came out empty (no transcript then) are written now
+        if (done && !store.notes(m.id).enhanced?.trim()) void notes.writeAgain(m.id)
+      }
+    } catch (e) { console.error('transcribing waiting meetings failed', e) } finally { backfilling = false }
+  }
+  setup.onState(() => void transcribeWaiting())
+  // at launch too, when the model is already in and setup has nothing new to say
+  void transcribeWaiting()
+  // tests: a recorded meeting back to "recorded before the speech model was in", and the catch-up run now
+  if (isFake()) Object.assign(((globalThis as Record<string, unknown>).__fake__ ??= {}) as object, {
+    untranscribe: () => { const id = store.meetings({ limit: 1 })[0].id; store.deleteSegments(store.segments(id).map((x) => x.id)); store.updateMeeting(id, { transcriptionPending: true }); return id },
+    transcribeWaiting: () => transcribeWaiting(),
+  })
+  onMeetingStopSaved(() => void transcribeWaiting())
   app.on('will-quit', killAllWatches)
   app.on('will-quit', killAllHelpers)
   let flushToken = 0
@@ -897,8 +941,8 @@ app.whenReady().then(() => {
       .map((m) => ({ ...withStopState(m), ...(recordingPaused(m.id) ? { paused: true } : {}) }))
   })
   const calendarList = async () => {
-    const list = await calendars(), hidden = loadSettings(settingsFile).hiddenCalendarIds ?? []
-    return { status: calendarStatus(), calendars: list.map((c) => ({ ...c, enabled: !hidden.includes(c.id) })) }
+    const list = await calendars(), settings = loadSettings(settingsFile), hidden = settings.hiddenCalendarIds ?? []
+    return { status: calendarStatus(), hideEventsWithoutCallLink: settings.hideEventsWithoutCallLink === true, calendars: list.map((c) => ({ ...c, enabled: !hidden.includes(c.id) })) }
   }
   ipcMain.handle('calendar:list', calendarList)
   ipcMain.handle('calendar:set-enabled', async (_e, id: unknown, enabled: unknown) => {
@@ -907,6 +951,13 @@ app.whenReady().then(() => {
     const hidden = new Set(loadSettings(settingsFile).hiddenCalendarIds ?? [])
     if (enabled) hidden.delete(id); else hidden.add(id)
     updateSettings(settingsFile, { hiddenCalendarIds: [...hidden] })
+    refreshCalendarConsumers()
+    win?.webContents.send('calendar:changed')
+    return true
+  })
+  ipcMain.handle('calendar:set-hide-without-link', (_e, hide: unknown) => {
+    if (typeof hide !== 'boolean') return false
+    updateSettings(settingsFile, { hideEventsWithoutCallLink: hide })
     refreshCalendarConsumers()
     win?.webContents.send('calendar:changed')
     return true

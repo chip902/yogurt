@@ -8,6 +8,7 @@ import type { Library } from './store'
 import type { Indexer } from './indexer'
 import type { Embedder } from './embedder'
 import { retrieve, type Item } from './retrieve'
+import { withoutPreamble } from '../../shared/answerPreamble'
 import { byMeeting, libraryPrompt, type History } from './prompt'
 import { citedIn, tidyCitations } from '../../shared/citations'
 import { attachContext } from '../../shared/askContext'
@@ -54,7 +55,7 @@ export function hookConversations(p: Deps) {
     if (!list) {
       // Only a question that was waiting for the download resumes after a restart.
       list = p.library.turns(id)
-        .map((t) => ({ id: t.id, question: t.question, answer: t.answer, status: t.waitingModel ? 'waiting' as const : t.stopped || !t.answer ? 'stopped' as const : 'done' as const, sources: t.sources }))
+        .map((t) => ({ id: t.id, question: t.question, answer: t.answer, scope: t.scope, status: t.waitingModel ? 'waiting' as const : t.stopped || !t.answer ? 'stopped' as const : 'done' as const, sources: t.sources }))
       open.set(id, list)
     }
     return list
@@ -112,7 +113,7 @@ export function hookConversations(p: Deps) {
     const done = all.filter((t) => t.status === 'done' && t.answer)
     const history = done.map((t) => ({ question: t.question, answer: t.answer }))
     const turn: ConversationTurn = resume === undefined
-      ? { id: p.library.addTurn(cid, question, now(), p.waitsForModel()), question, answer: '', status: 'waiting', sources: [] }
+      ? { id: p.library.addTurn(cid, question, now(), p.waitsForModel()), question, answer: '', status: 'waiting', sources: [], scope: p.library.describe(chips) }
       : all.find(t => t.id === resume)!
     if (resume === undefined) all.push(turn)
     const ac = new AbortController()
@@ -136,7 +137,7 @@ export function hookConversations(p: Deps) {
         onStep: (step) => { turn.step = step; later() },
         onRestart: () => { written = ''; completed = undefined; turn.answer = ''; turn.status = 'waiting'; turn.step = undefined; later() },
         onComplete: answer => { completed = answer },
-      })) { written += text; turn.answer = written; later() }
+      })) { written += text; turn.answer = withoutPreamble(written, { streaming: true }); later() }
     })() : p.queue.enqueue(async (stop) => {
       if (ac.signal.aborted) return
       const signal = AbortSignal.any([stop, ac.signal])
@@ -164,13 +165,13 @@ export function hookConversations(p: Deps) {
           return source
         })
         const found = [...new Set(items.map((i) => i.meetingId))]
-        turn.step = { kind: 'reading', meetings: found.length, ...(found.length === 1 ? { title: items[0].title } : {}) }
+        turn.step = { kind: 'reading', meetings: found.length, ...(found.length ? { title: items[0].title } : {}) }
         // the sources go out at once, so citations become links as they are written
         if (!over) flush()
         if (signal.aborted) return
         const answer = await llm.chat(libraryPrompt({ items, question, history: recent, now: now(), spelling }), (t) => {
           if (signal.aborted) return
-          written += t; turn.answer = written; later()
+          written += t; turn.answer = withoutPreamble(written, { streaming: true }); later()
         }, { maxTokens: ANSWER_TOKENS })
         if (!signal.aborted) completed = answer
       } finally {
@@ -184,7 +185,8 @@ export function hookConversations(p: Deps) {
     const finished = (async () => {
       try {
         await Promise.race([job, stopped])
-        turn.answer = single ? (completed ?? written).trim() : tidyCitations((completed ?? written).trim(), turn.sources)
+        const answer = withoutPreamble((completed ?? written).trim())
+        turn.answer = single ? answer : tidyCitations(answer, turn.sources)
         turn.status = ac.signal.aborted ? 'stopped' : 'done'
         turn.step = undefined
         const cited = new Set(citedIn(turn.answer))

@@ -10,7 +10,6 @@ import { toasts } from './TrashToast'
 export function NotesSetup({ go }: { go: (route: string) => void }) {
   const [setup, setSetup] = useState<SetupState>()
   const [open, setOpen] = useState(false)
-  const [pointer, setPointer] = useState(false)
   const [retrying, setRetrying] = useState(false)
   const [retryFailed, setRetryFailed] = useState(false)
   const [skipFailed, setSkipFailed] = useState(false)
@@ -53,7 +52,7 @@ export function NotesSetup({ go }: { go: (route: string) => void }) {
   const fraction = upgrading ? setup.notesUpgradeFraction : setup.notesFraction
   const percent = fraction !== undefined && Number.isFinite(fraction) ? Math.floor(Math.max(0, Math.min(1, fraction)) * 100) : undefined
   return <DirectionProvider direction={dirOf(language())}><span className="notes-download-status">
-    <Popover.Root open={open} onOpenChange={(next, details) => { if (next) setPointer(details.event instanceof MouseEvent && details.event.detail > 0); setOpen(next) }}>
+    <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger data-testid="notes-setup-open" aria-label={label} title={label}
         className="bar-btn notes-download-trigger no-drag">
         <span aria-hidden="true" data-failed={failed} data-upgrade={upgrading} className="notes-download-dot" />
@@ -61,7 +60,7 @@ export function NotesSetup({ go }: { go: (route: string) => void }) {
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="end" sideOffset={8} collisionPadding={12} positionMethod="fixed" className="notes-download-positioner">
-          <Popover.Popup data-testid="notes-setup" data-failed={failed} data-pointer={pointer} data-anchor="end" aria-label={failed ? stopped : upgrading ? t('Upgrading AI') : t('Downloading AI')} className="menu-entry notes-download-menu">
+          <Popover.Popup data-testid="notes-setup" data-failed={failed} data-anchor="end" aria-label={failed ? stopped : upgrading ? t('Upgrading AI') : t('Downloading AI')} className="menu-entry notes-download-menu">
             <div className="notes-download-readout">
               <strong role={failed ? 'status' : undefined}>{failed ? upgrading ? t('Upgrade paused') : t('Download stopped') : text.progress || (upgrading ? t('Upgrading AI') : t('Downloading AI'))}</strong>
               <span>{failed ? text.progress : upgrading ? percent !== undefined && notesPercent(fraction!) : text.eta}</span>
@@ -75,11 +74,11 @@ export function NotesSetup({ go }: { go: (route: string) => void }) {
                 : upgrading ? t("Once this model is ready, we'll remove the old one.") : t('You can record meetings. AI summaries and Ask work when this finishes.')}</p>
               {(failed || upgrading) && <div className="notes-download-actions">
                 {failed && <button data-testid="notes-setup-retry" className="notes-download-retry" disabled={retrying} onClick={() => void retry()}>{retrying ? t('Retrying…') : t('Try again')}</button>}
-                {upgrading && <button data-testid="notes-setup-skip" className="notes-download-skip" disabled={setup.notesUpgradeChanging} onClick={() => void skip()}>{t('Skip for now')}</button>}
+                {upgrading && <button data-testid="notes-setup-skip" className="notes-download-skip" disabled={setup.notesUpgradeChanging} onClick={() => void skip()}>{t('Skip')}</button>}
               </div>}
             </div>
-            {retryFailed && <p role="alert">{t("Couldn't restart the download. Try again.")}</p>}
-            {skipFailed && <p role="alert">{t("Couldn't change the notes model. Try again.")}</p>}
+            {retryFailed && <p role="alert">{t("Yogurt couldn't restart the download.")}</p>}
+            {skipFailed && <p role="alert">{t("Yogurt couldn't change the notes model.")}</p>}
           </Popover.Popup>
         </Popover.Positioner>
       </Popover.Portal>
