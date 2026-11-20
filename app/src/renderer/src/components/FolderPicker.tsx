@@ -1,5 +1,5 @@
 import { FolderGlyph } from './FolderAppearance'
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Check, FolderIcon, Minus, Plus, X } from 'lucide-react'
 import type { Folder, MeetingCard } from '../../../shared/types'
 import { t } from '../../../shared/i18n'
@@ -84,6 +84,12 @@ export function FolderChip({ meetingId, onNew, suggestion: manualSuggestion, row
   const presence = usePopoverPresence(open)
   const root = useRef<HTMLDivElement>(null)
   const chip = useRef<HTMLButtonElement>(null)
+  const focusAfterCommit = useRef<HTMLButtonElement | null>(null)
+  useLayoutEffect(() => {
+    const focus = focusAfterCommit.current
+    focusAfterCommit.current = null
+    if (focus && document.activeElement === document.body) (row ? focus : chip.current)?.focus({ preventScroll: true })
+  })
   useEffect(() => {
     if (suggestion && folders?.length) suggestion.dismiss()
     if (transition?.phase === 'settled' && folders?.length) setTransition(null)
@@ -109,9 +115,9 @@ export function FolderChip({ meetingId, onNew, suggestion: manualSuggestion, row
   const label = proposed?.name ?? (!folders?.length ? t('Add to folder') : folders.length === 1 ? folders[0].name : t('{name} + {more}', { name: folders[0].name, more: folders.length - 1 }))
   const focusAfterSuggestion = () => row ? root.current?.closest('li')?.querySelector<HTMLButtonElement>('.native-meeting-link') : chip.current
   const clearSuggestion = (focus: HTMLButtonElement | null | undefined) => {
+    focusAfterCommit.current = focus ?? null
     toasts.close(`folder-suggestion-${meetingId}`); suggestion?.dismiss()
     setAutomatic(null); setOpen(false)
-    requestAnimationFrame(() => { if (document.activeElement === document.body) (row ? focus : chip.current)?.focus({ preventScroll: true }) })
   }
   const dismissSuggestion = async () => {
     if (!proposed || adding || held) return
@@ -141,8 +147,8 @@ export function FolderChip({ meetingId, onNew, suggestion: manualSuggestion, row
     if (!transition || transition.phase === 'saving' || transition.phase === 'settled') return
     const focus = focusAfterSuggestion()
     const finish = () => {
+      focusAfterCommit.current = focus ?? null
       setTransition(transition.phase === 'accepted' ? { ...transition, phase: 'settled' } : null)
-      requestAnimationFrame(() => { if (document.activeElement === document.body) (row ? focus : chip.current)?.focus({ preventScroll: true }) })
     }
     const timer = setTimeout(finish, reduced ? motion.micro : motion.base)
     return () => clearTimeout(timer)
@@ -159,8 +165,8 @@ export function FolderChip({ meetingId, onNew, suggestion: manualSuggestion, row
       {proposed ? <div data-testid="folder-suggestion" role="group" aria-label={accepted ? t('Folders') : t('Suggested')} inert={held?.phase === 'dismissed'} data-phase={held?.phase} className={row ? 'meeting-folder-pill meeting-folder-proposal' : 'note-chip note-folder-proposal flex items-center rounded-md border border-line text-[13px] text-muted'}>
         {trigger}
         <div className="note-folder-actions" inert={accepted || held?.phase === 'dismissed'}>
-          <button data-testid="folder-suggestion-cancel" className="workspace-icon" disabled={adding || !!held} onClick={() => void dismissSuggestion()} aria-label={t('Dismiss suggestion')} title={t('Dismiss suggestion')}><X size={row ? 12 : 15} aria-hidden="true" /></button>
-          <button data-testid="folder-suggestion-confirm" className="workspace-icon" disabled={adding || !!held} onClick={() => void confirmSuggestion()} aria-label={t('Add to folder')} title={t('Add to folder')}><Check size={row ? 12 : 15} aria-hidden="true" /></button>
+          <button data-testid="folder-suggestion-cancel" className="ghost-btn workspace-icon" disabled={adding || !!held} onClick={() => void dismissSuggestion()} aria-label={t('Dismiss suggestion')} title={t('Dismiss suggestion')}><X size={row ? 12 : 15} aria-hidden="true" /></button>
+          <button data-testid="folder-suggestion-confirm" className="ghost-btn workspace-icon" disabled={adding || !!held} onClick={() => void confirmSuggestion()} aria-label={t('Add to folder')} title={t('Add to folder')}><Check size={row ? 12 : 15} aria-hidden="true" /></button>
         </div>
       </div> : trigger}
       {presence.value && <div data-testid="folder-menu" {...presence.props} data-anchor="start" role="menu" aria-label={t('Add to folder')} onKeyDown={key}

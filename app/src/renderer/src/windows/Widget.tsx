@@ -1,3 +1,4 @@
+import { transcriptSpeaker } from '../../../shared/transcript'
 import { SPEAKER_COLORS } from '../../../shared/speakerColors'
 import { widgetDragDelta, isWidgetClick, type WidgetPress } from '../../../shared/widgetGesture'
 import { Loading } from '../components/Loading'
@@ -199,7 +200,7 @@ function Preview({ view, open }: { view: WidgetView; open: boolean }) {
   return <div data-testid="widget-preview" className="widget-preview" role="region" aria-label={t('Live transcript')} inert={!open} aria-hidden={!open}>
     {note && <div className="widget-preview-warning" role="status">
       <p data-testid="widget-note" data-tone={note.tone}>{note.text}</p>
-      {permission && <button className="widget-settings" onClick={() => { void window.yogurt.permissions.open(permission) }}>{t('Open Settings')}</button>}
+      {permission && <button className="workspace-button widget-settings" onClick={() => { void window.yogurt.permissions.open(permission) }}>{t('Open Settings')}</button>}
     </div>}
     <ScrollFade>
     <div ref={scroll} data-testid="widget-preview-text" className="widget-preview-conversation" role="log" aria-live="off" aria-label={t('Transcript')}
@@ -213,7 +214,7 @@ function Preview({ view, open }: { view: WidgetView; open: boolean }) {
       {!loaded ? <Loading layout="transcript" testId="widget-preview-loading" /> : !grouped.length && <p className="widget-preview-empty">{failed ? t("Couldn't load the transcript. Open Yogurt to try again.") : t('Listening for speech…')}</p>}
       {grouped.map(turn => {
         const first = turn[0], me = first.track === 'me'
-        const who = me ? t('You') : first.speaker || t('Them')
+        const who = transcriptSpeaker(first)
         const color = me || !('speakerColor' in first) ? undefined : first.speakerColor
         return <div key={`${first.track}:${first.startMs}`} className="widget-preview-turn" data-me={me}>
           <span className="widget-preview-speaker" data-color={color} data-folder-color={color === undefined ? undefined : SPEAKER_COLORS[color]}>{who}</span>
@@ -225,6 +226,6 @@ function Preview({ view, open }: { view: WidgetView; open: boolean }) {
       </div>
     </div>
     </ScrollFade>
-    {behind && <button data-testid="widget-preview-latest" className="widget-preview-latest" onClick={latest}><ArrowDown size={12} aria-hidden="true" />{t('Latest')}</button>}
+    {behind && <button data-testid="widget-preview-latest" className="workspace-button widget-preview-latest" onClick={latest}><ArrowDown size={12} aria-hidden="true" />{t('Latest')}</button>}
   </div>
 }

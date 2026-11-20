@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { InlineError } from './InlineError'
 import { ScrollFade } from './ScrollFade'
 import { LoadingContent } from './LoadingContent'
 import { LevelBars } from './LevelBars'
@@ -20,7 +21,7 @@ type Actions = {
   onStart: (id: string) => Promise<void>
   onOpen: (id: string) => void
 }
-type Day = { at: number; status: CalendarStatus; events: AgendaEvent[] }
+type Day = { at: number; status: CalendarStatus; events: AgendaEvent[]; unavailable?: string[] }
 
 type Inspection = { at: number; id: string; pointer: boolean }
 let lastView: { selected: number; week: number } | undefined
@@ -96,7 +97,10 @@ export function Agenda({ revision, recording, onStart, onOpen, jumpTo }: Actions
   const calendar = loaded?.at === selected ? loaded : days.current.get(selected)
   const scrollKey = `agenda/${selected}`
   const scroll = useScrollMemory<HTMLDivElement>(scrollKey, !!calendar)
+  const narrowScroll = useScrollMemory<HTMLElement>(scrollKey + '/narrow', !!calendar)
   useEffect(() => { lastView = { selected, week: weekAnchor } }, [selected, weekAnchor])
+  const unavailable = calendar?.unavailable?.length ? calendar.unavailable : calendar?.status === 'error' ? [t('Calendar')] : []
+  const failedCalendar = unavailable.length ? t("Can't read {calendar}", { calendar: new Intl.ListFormat(language()).format(unavailable) }) : undefined
   const events = calendar?.events ?? []
   const primary = pickNext(events, now)
   const defaultEvent = relativeDay === 0 ? events.find(e => e.id === primary) ?? events.find(e => e.start > now) ?? events.at(-1) : events[0]
@@ -111,23 +115,25 @@ export function Agenda({ revision, recording, onStart, onOpen, jumpTo }: Actions
     const jumping = lastJump.current !== jump
     lastJump.current = jump
     // Restore manual reading positions; only a fresh day or Today explicitly jumps to the next meeting.
-    if (!jumping && rememberedScroll(scrollKey) !== undefined) return
+    const narrow = narrowScroll.current && getComputedStyle(narrowScroll.current).overflowY === 'auto'
+    const viewport = narrow ? narrowScroll.current! : scroll.current
+    if (!jumping && rememberedScroll(narrow ? scrollKey + '/narrow' : scrollKey) !== undefined) return
     const row = scroll.current.querySelector<HTMLElement>('[data-agenda-default="true"]')
-    if (row) scroll.current.scrollTop += row.getBoundingClientRect().top - scroll.current.getBoundingClientRect().top - 16
+    if (row) viewport.scrollTop += row.getBoundingClientRect().top - viewport.getBoundingClientRect().top - 16
   }, [calendar, defaultEvent, selected, jump, scrollKey, scroll])
   const step = (offset: -1 | 1) => {
     const next = stepAgendaDay(selected, weekAnchor, offset)
     setSelected(next.selected); setWeekAnchor(next.weekAnchor); setInspected(undefined)
   }
-  return <aside className="native-agenda" aria-label={t('Agenda')}>
+  return <aside ref={narrowScroll} className="native-agenda" aria-label={t('Agenda')}>
     <div className="agenda-header">
       <h2>{t('Agenda')}</h2>
       <button className="workspace-button" onClick={() => { const at = shiftDay(Date.now(), 0); setSelected(at); setWeekAnchor(at); setInspected(undefined); setJump(n => n + 1) }}>{t('Today')}</button>
     </div>
     <div className="agenda-navigation">
       <span className="agenda-month">{new Date(weekAnchor).toLocaleDateString(language(), { month: 'long', year: 'numeric' })}</span>
-      <button className="workspace-icon" aria-label={t('Previous day')} onClick={() => step(-1)}><ChevronLeft size={15} className="rtl:-scale-x-100" /></button>
-      <button className="workspace-icon" aria-label={t('Next day')} onClick={() => step(1)}><ChevronRight size={15} className="rtl:-scale-x-100" /></button>
+      <button className="ghost-btn workspace-icon" aria-label={t('Previous day')} onClick={() => step(-1)}><ChevronLeft size={15} className="rtl:-scale-x-100" /></button>
+      <button className="ghost-btn workspace-icon" aria-label={t('Next day')} onClick={() => step(1)}><ChevronRight size={15} className="rtl:-scale-x-100" /></button>
     </div>
     <div className="agenda-week" aria-label={t('Choose agenda date')}>
       {weekDates(weekAnchor).map((at) => {
@@ -140,16 +146,24 @@ export function Agenda({ revision, recording, onStart, onOpen, jumpTo }: Actions
     <div className="agenda-day"><h3>{relativeDay === 0 ? t('Today') : relativeDay === -1 ? t('Tomorrow') : chosen.toLocaleDateString(language(), { weekday: 'long' })}</h3><span>{chosen.toLocaleDateString(language(), { month: 'short', day: 'numeric' })}</span></div>
     <ScrollFade enabled={!!calendar}><div ref={scroll} className="agenda-scroll" data-testid="agenda-scroll">
     <LoadingContent key={selected} pending={!calendar} skeleton={<div className="agenda-events">{[0, 1].map(n => <Event key={n} loading event={{ id: String(n), title: '', url: null, start: selected, end: selected, attendees: [] }} me="" now={now} near={false} initial={false} selected={false} onInspect={() => {}} />)}</div>}>
-    {calendar && (calendar.status !== 'granted' ? <section className="agenda-status" data-testid={calendar.status === 'error' ? 'calendar-error' : 'calendar-off'}>
+    {calendar && (calendar.status !== 'granted' && calendar.status !== 'error' ? <section className="agenda-status" data-testid="calendar-off">
         <CalendarDays size={22} aria-hidden="true" />
-        <h3>{calendar.status === 'error' ? t("Yogurt couldn't read your calendar") : calendar.status === 'denied' ? t('Calendar access is off') : t('See your meetings here')}</h3>
-        <p>{calendar.status === 'error' ? t('Try reading the calendars on this Mac again.') : t('Connect the calendars on this Mac to see your upcoming meetings.')}</p>
-        <button className="workspace-button" onClick={calendar.status === 'error' ? () => void load() : connect}>{calendar.status === 'error' ? t('Try again') : calendar.status === 'denied' ? t('Open System Settings') : t('Connect calendar')}</button>
+        <h3>{calendar.status === 'denied' ? t('Calendar access is off') : t('See your meetings here')}</h3>
+        <p>{window.yogurt.capabilities.calendarLink ? t('Connect a calendar to see your meetings.') : t('Connect the calendars on this Mac to see your upcoming meetings.')}</p>
+        <button className="workspace-button" onClick={connect}>{calendar.status === 'denied' ? t('Open System Settings') : t('Connect calendar')}</button>
       </section>
-      : <div data-testid="coming-up" className="agenda-events">
-        {calendar.events.length === 0 ? <div className="agenda-status"><CalendarDays size={18} strokeWidth={1.75} aria-hidden="true" /><h3>{t('No meetings')}</h3></div>
+      : <>
+        {failedCalendar && calendar.events.length > 0 && <InlineError testId="calendar-error" retry={() => void load()}>
+          <span>{failedCalendar}</span>
+        </InlineError>}
+        <div data-testid="coming-up" className="agenda-events">
+        {calendar.events.length === 0 ? <div className="agenda-status" data-testid={failedCalendar ? 'calendar-error' : undefined} role={failedCalendar ? 'alert' : undefined}>
+          <CalendarDays size={18} strokeWidth={1.75} aria-hidden="true" />
+          <h3>{failedCalendar ?? t('No meetings')}</h3>
+          {failedCalendar && <button type="button" className="workspace-button" onClick={() => void load()}>{t('Try again')}</button>}
+        </div>
           : calendar.events.map((event) => <Event key={event.id} event={event} me={me} now={now} near={event.id === primary} initial={event.id === defaultEvent?.id} selected={event.id === detail?.id} onInspect={(button, pointer) => { opener.current = button; setInspected({ at: selected, id: event.id, pointer }) }} recording={recording} />)}
-      </div>)}
+      </div></>)}
     </LoadingContent></div></ScrollFade>
     {calendar?.status === 'granted' && shownDetail && <EventDetails motionProps={presence.props} key={shownDetail.id} event={shownDetail} recording={recording} onStart={onStart} now={now} onOpen={onOpen} onClose={closeDetails} opener={opener.current} />}
   </aside>
@@ -229,7 +243,7 @@ function EventDetails({ motionProps, event, recording, onOpen, onStart, now, onC
     <i className="agenda-inspector-arrow" aria-hidden="true" />
     <div className="agenda-inspector-content">
     <div className="agenda-inspector-heading"><h3 id="agenda-detail-title" tabIndex={-1}>{event.title || t('Meeting')}</h3>
-      <button className="workspace-icon" aria-label={t('Close')} onClick={() => onClose()}><X size={16} aria-hidden="true" /></button>
+      <button className="ghost-btn workspace-icon" aria-label={t('Close')} onClick={() => onClose()}><X size={16} aria-hidden="true" /></button>
     </div>
     <div className="agenda-inspector-line agenda-inspector-time"><Clock size={15} aria-hidden="true" /><div>
       <p>{timeOf(event.start)} – {timeOf(event.end)}</p>
@@ -239,14 +253,14 @@ function EventDetails({ motionProps, event, recording, onOpen, onStart, now, onC
       <ul id="agenda-detail-people" aria-label={t('People')}>
         {(expanded ? event.attendees : event.attendees.slice(0, 5)).map((person, i) => <li key={`${person.name}-${i}`} title={person.email || undefined}>{personName(person.name)}{expanded && person.email && person.email !== personName(person.name) && <span>{person.email}</span>}</li>)}
       </ul>
-      {!expanded && event.attendees.length > 5 && <button className="agenda-more-people" aria-expanded={false} aria-controls="agenda-detail-people" onClick={() => setExpanded(true)}>{t('and {count} more', { count: event.attendees.length - 5 })}</button>}
+      {!expanded && event.attendees.length > 5 && <button className="text-action mt-2" aria-expanded={false} aria-controls="agenda-detail-people" onClick={() => setExpanded(true)}>{t('and {count} more', { count: event.attendees.length - 5 })}</button>}
     </div></div></ScrollFade>}
-    {action === 'start' && <button data-testid="event-open" disabled={pending} className="workspace-button agenda-open-note primary self-start" onClick={() => void act()}><Mic size={13} aria-hidden="true" />{t('Take notes')}</button>}
+    {action === 'start' && <button data-testid="event-open" disabled={pending} className="workspace-button primary self-start" onClick={() => void act()}><Mic size={13} aria-hidden="true" />{t('Take notes')}</button>}
     {(event.calendar || action && action !== 'start' || url) && <div className="agenda-inspector-footer" data-testid="agenda-detail-footer">
     {event.calendar && <div className="agenda-inspector-line"><CalendarDays size={15} aria-hidden="true" /><p>{event.calendar.name}{event.calendar.source && <span>{event.calendar.source}</span>}</p></div>}
     {(action && action !== 'start' || url) && <div className="agenda-inspector-actions">
-    {action && action !== 'start' && <button data-testid="event-open" disabled={pending} className="workspace-button agenda-open-note" title={action === 'open' ? t('Open note') : t('Prepare note')} onClick={() => void act()}><FileText size={13} aria-hidden="true" /><span>{action === 'open' ? t('Open note') : t('Prepare note')}</span></button>}
-    {url && <a className="workspace-button agenda-open-note" title={t('Join meeting')} href={url} target="_blank" rel="noreferrer"><span>{t('Join meeting')}</span><ExternalLink size={12} aria-hidden="true" /></a>}
+    {action && action !== 'start' && <button data-testid="event-open" disabled={pending} className="workspace-button" title={action === 'open' ? t('Open note') : t('Prepare note')} onClick={() => void act()}><FileText size={13} aria-hidden="true" /><span>{action === 'open' ? t('Open note') : t('Prepare note')}</span></button>}
+    {url && <a className="workspace-button" title={t('Join meeting')} href={url} target="_blank" rel="noreferrer"><span>{t('Join meeting')}</span><ExternalLink size={12} aria-hidden="true" /></a>}
     </div>}
     </div>}
     {failed && <p role="alert" className="text-danger">{t("Yogurt couldn't start the notes. Try again in a moment.")}</p>}

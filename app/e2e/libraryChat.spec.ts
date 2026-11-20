@@ -36,12 +36,14 @@ test('asking across meetings from Chat: the answer streams in with sources that 
     await expect(page.getByTestId('chat-page-answer').locator('.fw').first()).toBeVisible()
     await expect(turn).toHaveAttribute('data-status', 'done', { timeout: 15_000 })
     await expect(page.getByTestId('chat-page-answer')).toContainText('Pricing call')
-    // Numbered marks reveal the retrieved source without leaving the answer.
+    // The cited sentence reveals its supporting quote without leaving the answer.
     const chip = page.getByTestId('source-citation').first()
-    await expect(chip).toHaveText('1')
+    await expect(chip).toHaveText('In Pricing call, it was discussed.')
     await expect(chip).toHaveAccessibleName(/Pricing call/)
     await chip.hover()
-    await expect(page.getByTestId('citation-excerpt')).toContainText('Twenty dollars a seat')
+    await expect(page.getByTestId('citation-excerpt')).toContainText('How much would fifty seats be?')
+    await expect(page.getByTestId('citation-excerpt')).toContainText('Twenty dollars a seat, billed yearly.')
+    await expect(page.getByTestId('citation-card')).toHaveCSS('min-width', '280px')
     await expect(page.getByTestId('chat-page-answer')).not.toContainText('[1]')
     // the chat is saved, named after the question, and the address is its own
     expect((await page.evaluate(() => window.yogurt.conversations.list()))[0].title).toBe('Who said twenty dollars?')
@@ -66,10 +68,10 @@ test('asking across meetings from Chat: the answer streams in with sources that 
     await expect(page.getByTestId('chat-page-turn')).toHaveAttribute('data-status', 'done')
     await page.reload()
     await expect(page.getByTestId('chat-page-answer')).toContainText('Pricing call')
-    await expect(page.getByTestId('source-citation').first()).toHaveText('1')
+    await expect(page.getByTestId('source-citation').first()).toHaveText('In Pricing call, it was discussed.')
     await page.keyboard.press('Tab')
     await page.getByTestId('source-citation').first().focus()
-    await expect(page.getByTestId('citation-excerpt')).toContainText('Twenty dollars a seat')
+    await expect(page.getByTestId('citation-excerpt')).toContainText('How much would fifty seats be?')
     await page.keyboard.press('Tab')
     await expect(page.getByTestId('citation-open')).toBeFocused()
     await page.keyboard.press('Escape')
@@ -108,11 +110,11 @@ test('a follow-up stays in the chat; New chat starts another; chats can be renam
     await page.getByTestId('chat-page-input').fill('What are my next steps?')
     await page.getByTestId('chat-page-input').press('Enter')
     await expect(page.getByTestId('chat-page-turn')).toHaveAttribute('data-status', 'done', { timeout: 15_000 })
-    // The bubble treatment distinguishes Notes from timestamped transcript sources.
-    await expect(page.getByTestId('source-citation').first()).toHaveText('1')
+    // The compact preview leads with the meeting and the supporting quote.
+    await expect(page.getByTestId('source-citation').first()).toHaveText('In Pricing call, it was discussed.')
     await expect(page.getByTestId('source-citation').first()).toHaveAccessibleName(/Pricing call/)
     await page.getByTestId('source-citation').first().hover()
-    await expect(page.locator('.citation-footer')).toContainText('Notes')
+    await expect(page.locator('.citation-heading')).toContainText('Pricing call')
     await expect(page.getByTestId('citation-open')).toBeVisible()
     await page.keyboard.press('Escape')
     const input = page.getByTestId('chat-page-input')
@@ -234,5 +236,27 @@ test('a meeting cited for several of its parts shows one mark, and an answer tha
     await expect(page.getByTestId('chat-page-turn')).toHaveAttribute('data-status', 'done', { timeout: 15_000 })
     await expect(page.getByTestId('chat-page-answer')).toHaveText('Nothing in your meetings is about that.')
     await expect(page.getByTestId('source-citation')).toHaveCount(0)
+  } finally { await app.close() }
+})
+
+test('Ask retries a failed initial lookup', async () => {
+  const { app, page } = await launch()
+  try {
+    await app.evaluate(({ ipcMain }) => {
+      let first = true
+      ipcMain.removeHandler('conversations:current')
+      ipcMain.handle('conversations:current', () => {
+        if (first) { first = false; throw new Error('Offline fixture') }
+        return 'retry-demo'
+      })
+      ipcMain.removeHandler('conversations:get')
+      ipcMain.handle('conversations:get', () => ({ id: 'retry-demo', title: '', draft: '', chips: [], draftChips: [], firstChips: null, turns: [], waitsForMeeting: false, waitsForModel: false }))
+    })
+    await page.evaluate(() => window.yogurt.nav.go('/chat'))
+    const failure = page.getByTestId('chat-page-load-error')
+    await expect(failure).toContainText("Couldn't load this conversation.")
+    await failure.getByRole('button', { name: 'Try again' }).click()
+    await expect(failure).toHaveCount(0)
+    await expect(page.getByTestId('chat-page-input')).toBeEnabled()
   } finally { await app.close() }
 })

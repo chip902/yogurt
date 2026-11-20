@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { capabilities, commandKey, helperFile, micListHelper, platformOf, shortcutLabel, supportedKinds } from '../src/shared/platform'
+import { capabilities, commandKey, helperFile, micListHelper, platformOf, shortcutLabel, supportedKinds, settingsPage } from '../src/shared/platform'
 import { PERMISSION_KINDS } from '../src/main/permissions'
 
 describe('what each computer can do', () => {
   it('a Mac has every feature, exactly as before', () => {
-    expect(capabilities('darwin')).toEqual({ calendar: true, callNames: true, permissionPrompts: true, mediaPause: true })
+    expect(capabilities('darwin')).toEqual({ calendar: true, calendarLink: false, callNames: true, permissionPrompts: true, mediaPause: true })
   })
-  it('Windows and Linux have no calendar; both read names from calls (UI Automation, AT-SPI)', () => {
-    expect(capabilities('win32')).toEqual({ calendar: false, callNames: true, permissionPrompts: false, mediaPause: false })
-    expect(capabilities('linux')).toEqual({ calendar: false, callNames: true, permissionPrompts: false, mediaPause: false })
+  it('Windows and Linux have a calendar through a calendar link (no system calendar to ask), and names from calls', () => {
+    expect(capabilities('win32')).toEqual({ calendar: true, calendarLink: true, callNames: true, permissionPrompts: false, mediaPause: false })
+    expect(capabilities('linux')).toEqual({ calendar: true, calendarLink: true, callNames: true, permissionPrompts: false, mediaPause: false })
   })
   it('only fake mode can pretend to be another computer, so the Mac CI can try the Windows and Linux screens', () => {
     expect(platformOf('darwin', { YOGURT_FAKE: '1', YOGURT_FAKE_PLATFORM: 'win32' })).toBe('win32')
@@ -64,5 +64,27 @@ describe('shortcuts', () => {
     const key = (metaKey: boolean, ctrlKey: boolean) => ({ metaKey, ctrlKey })
     expect([key(true, false), key(false, true)].map((e) => commandKey(e, 'darwin'))).toEqual([true, false])
     expect([key(true, false), key(false, true), key(true, true)].map((e) => commandKey(e, 'win32'))).toEqual([false, true, false])
+  })
+})
+
+describe('settingsPage: a permission row offers Manage only where the computer has a page to open (#70)', () => {
+  it('a Mac opens System Settings for every one', () => {
+    for (const k of ['mic', 'systemAudio', 'calendar', 'notifications', 'accessibility'] as const) expect(settingsPage('darwin', k)).toBe(true)
+  })
+  it('Windows has pages for the mic, sound and notifications, none for names from calls', () => {
+    expect(settingsPage('win32', 'mic')).toBe(true)
+    expect(settingsPage('win32', 'systemAudio')).toBe(true)
+    expect(settingsPage('win32', 'notifications')).toBe(true)
+    expect(settingsPage('win32', 'accessibility')).toBe(false)
+  })
+  it('Linux has none to open', () => {
+    for (const k of ['mic', 'systemAudio', 'notifications', 'accessibility'] as const) expect(settingsPage('linux', k)).toBe(false)
+  })
+})
+
+describe('settingsPage agrees with the links main opens', () => {
+  it('Windows rows offer Manage exactly where main has a link', async () => {
+    const { WINDOWS_SETTINGS } = await import('../src/main/permissions')
+    for (const k of PERMISSION_KINDS) expect(settingsPage('win32', k)).toBe(!!WINDOWS_SETTINGS[k])
   })
 })

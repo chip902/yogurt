@@ -13,6 +13,10 @@
 </p>
 
 <p align="center">
+  Or on a Mac with <a href="https://brew.sh">Homebrew</a>: <code>brew install --cask frigadehq/yogurt/yogurt</code>
+</p>
+
+<p align="center">
   <img src="docs/assets/yogurt-screenshot.webp" width="1074" alt="Yogurt showing the Summary of a launch planning meeting: the plan, next steps by person, and your own reminders">
 </p>
 
@@ -32,13 +36,13 @@
 - **Meeting summaries.** Yogurt writes up the conversation and any notes you add.
 - **Private by default.** Your audio, transcripts and AI processing stay on your computer.
 - **Free and open source.** You can use Yogurt without an account.
-- **Who said what.** Yogurt names speakers from Zoom, Teams and Meet on Mac only.
-- **Languages.** Multi-language mode transcribes 99 languages.
+- **Who said what.** Yogurt names speakers from Zoom, Teams and Meet on Mac, Windows and Linux.
+- **Languages.** Multi-language mode transcribes 99 languages, follows each side of the call in its own language, and keeps up when someone switches languages mid-meeting.
 - **Recording reminders.** Yogurt offers to record when a supported call starts.
 - **Answers with sources.** Yogurt answers questions across meetings and links to the source.
 - **Folders and search.** You can find meetings by folder, title, notes or transcript.
 - **Copy and export.** You can copy notes or transcripts, or save both as Markdown.
-- **Local MCP server.** When you turn this on, apps on your computer can read your notes, transcripts and saved audio.
+- **Local MCP server.** When you turn this on, apps on your computer can read your notes, transcripts, saved audio and each meeting's calendar details (attendees' names and emails).
 - **Automatic stop.** By default, Yogurt stops recording when it detects that your call has ended.
 
 ## Watch the demo
@@ -67,15 +71,7 @@ Meeting data stays local; Yogurt goes online for model downloads and update chec
 
 <br>
 
-> A Mac with Apple silicon and macOS 14.4 or newer, a 64-bit PC with Windows 10 (version 2004) or newer, or a 64-bit Linux computer with Ubuntu 22.04 or newer. Each needs at least 8 GB of memory. If your computer is too slow, Yogurt tells you during setup. Calendar and speaker names from calls are Mac only for now.
-
-</details>
-
-<details><summary><strong>Windows says “Windows protected your PC.” What do I do?</strong></summary>
-
-<br>
-
-> Click More info, then Run anyway. Windows shows this for new apps that aren’t signed with a Microsoft certificate yet. Yogurt is open source, so anyone can check what it does.
+> A Mac with Apple silicon and macOS 14.4 or newer, a 64-bit PC with Windows 10 (version 2004) or newer, or a 64-bit Linux computer with Ubuntu 22.04 or newer. Each needs at least 8 GB of memory. If your computer is too slow, Yogurt tells you during setup. On Windows and Linux, you connect your calendar with a private calendar link.
 
 </details>
 
@@ -123,7 +119,7 @@ Meeting data stays local; Yogurt goes online for model downloads and update chec
 
 <br>
 
-> In **Settings → AI apps**, turn on access, copy the helper command, and add it as a local MCP server in your assistant app. Access is off by default. The app can read your meetings, notes and transcripts, but cannot change them. It may send what it reads to its own online model. Turn access off in Yogurt to stop further reads.
+> In **Settings → AI apps**, turn on access, copy the helper command, and add it as a local MCP server in your assistant app. Access is off by default. The app can read your meetings (including their calendar details: the event, and attendees' names and emails), notes and transcripts, but cannot change them. It may send what it reads to its own online model. Turn access off in Yogurt to stop further reads.
 
 </details>
 
@@ -131,7 +127,7 @@ Meeting data stays local; Yogurt goes online for model downloads and update chec
 
 <br>
 
-> Access is off until you enable it in **Settings → AI apps**. Apps get read-only access to meetings, notes and transcripts. Mac and Linux use a socket in your profile folder with `0600` permissions, so only your user account can open it. Windows uses a named pipe with a new random name each launch, stored only in your profile folder. There is no per-app token, so any app running under your account can read while access is on. Settings shows connected apps by their self-reported names.
+> Access is off until you enable it in **Settings → AI apps**. Apps get read-only access to meetings (with their calendar event and attendees' names and emails), notes and transcripts. Mac and Linux use a socket in your profile folder with `0600` permissions, so only your user account can open it. Windows uses a named pipe with a new random name each launch, stored only in your profile folder. There is no per-app token, so any app running under your account can read while access is on. Settings shows connected apps by their self-reported names.
 
 </details>
 
@@ -147,7 +143,9 @@ Meeting data stays local; Yogurt goes online for model downloads and update chec
 
 <br>
 
-> Pick **Multi-language** in **Settings → Language → Spoken language** to transcribe 99 languages. You can also switch from the **English** menu in a note’s footer before or during recording. English only is the default. Summaries follow the meeting’s main language; answers follow your question’s language. Settings also offers 32 app languages.
+> Pick **Multi-language** in **Settings → Language → Spoken language** to transcribe 99 languages. You can also switch from the **English** menu in a note’s footer before or during recording. English only is the default, and it’s the fastest and most accurate choice for English meetings.
+>
+> In Multi-language mode, you and the other side of the call can each speak your own language, and Yogurt follows along when someone switches languages mid-meeting. Summaries follow the meeting’s main language, or the one you pick in **Settings → Summary language**. Answers in Ask follow your question’s language. Settings also offers 32 app languages.
 
 </details>
 

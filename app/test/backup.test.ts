@@ -48,6 +48,13 @@ function fill(s: Store, title: string, word: string) {
 }
 
 describe('backup merge', () => {
+  it('preserves even an empty attendee list restored from before edit history was recorded', () => {
+    const from = fresh(), into = fresh()
+    const note = from.createMeeting({ ...base, title: 'Old note', startedAt: 1000, attendees: [] })
+    from.db.exec('ALTER TABLE meetings DROP COLUMN keep_attendees')
+    mergeBackup(into.db, from.db)
+    expect(into.meeting(note.id)).toMatchObject({ attendees: [], keepAttendees: true })
+  })
   it('a backup from when voices had letters: its lines of the other side come in as Them', () => {
     const from = fresh(), into = fresh()
     const m = fill(from, 'Old', 'letters')
@@ -140,11 +147,11 @@ describe('backup merge', () => {
 
   it('knows every table that holds a meeting\'s rows, and every table is one of them', () => {
     const s = fresh()
-    expect(meetingTables(s.db).map((t) => t.table).sort()).toEqual(['chat_turns', 'folder_meetings', 'library_chunks', 'library_sources', 'notes', 'segments'])
+    expect(meetingTables(s.db).map((t) => t.table).sort()).toEqual(['chat_turns', 'folder_meetings', 'library_chunks', 'library_sources', 'notes', 'segments', 'transcription_drafts'])
     // a new table that is not tied to a meeting would be left out of backups: decide what a backup does with it, then list it here
     const all = (s.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '%_fts%'").all() as Array<{ name: string }>).map((r) => r.name)
-    expect(all.filter((t) => t !== 'meetings' && !meetingTables(s.db).some((m) => m.table === t)).sort()).toEqual(['conversation_turns', 'conversations', 'folders', 'people'])
-    // those are carried on their own: a conversation and every turn of it, and folders (test/folders.test.ts)
+    expect(all.filter((t) => t !== 'meetings' && !meetingTables(s.db).some((m) => m.table === t)).sort()).toEqual(['conversation_turns', 'conversations', 'folders', 'own_emails', 'people'])
+    // Own addresses merge by email, like the people records. The remaining tables are carried on their own: a conversation and every turn of it, and folders (test/folders.test.ts)
     expect(carriedTables(s.db)).toEqual([{ table: 'conversations', column: 'id' }, { table: 'conversation_turns', column: 'conversation_id' }, { table: 'folders', column: 'id' }])
   })
 

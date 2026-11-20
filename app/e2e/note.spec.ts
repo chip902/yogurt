@@ -42,7 +42,7 @@ const heard = (page: Page, id: string) => expect.poll(async () => (await page.ev
 
 test('Stop ends recording when its metadata cannot save, and Retry saves without stopping twice', async () => {
   const { app, page, userData } = await launch()
-  const db = new DatabaseSync(join(userData, 'yogurt.db'))
+  const db = new DatabaseSync(join(userData, 'yogurt.db'), { timeout: 5000 })
   try {
     const id = await record(app, page)
     await page.getByTestId('note-mine').fill('Remember to send the launch plan.')
@@ -235,6 +235,15 @@ test('edits to the enhanced notes are saved; Write again asks first, then writes
     await page.getByTestId('note-write-again').click()
     await expect(page.getByTestId('note-regenerate')).toBeVisible()
     await expect(page.getByTestId('note-confirm')).toBeVisible()
+    const sizes = await page.locator('.note-prose').first().evaluate(prose => {
+      const sample = prose.cloneNode(false) as HTMLElement
+      sample.innerHTML = '<h2>Planning</h2><h3>Dates</h3>'
+      prose.parentElement!.append(sample)
+      const values = Array.from(sample.children, child => parseFloat(getComputedStyle(child).fontSize))
+      sample.remove()
+      return values
+    })
+    expect(sizes[0]).toBeGreaterThan(sizes[1])
     await expect(page.getByTestId('note-regenerate-input')).toHaveValue('')
     await page.getByTestId('note-regenerate-input').press('Enter')
     await expect(page.getByTestId('note-enhanced')).toHaveAttribute('data-status', 'writing', { timeout: 30_000 })
@@ -339,9 +348,11 @@ test('the recording header keeps status, time and actions while Transcript and A
     await expect(theirs).toHaveText(/^Sure\./, { timeout: 30_000 })
     await expect(page.getByTestId('transcript-turn').filter({ has: theirs }).getByTestId('transcript-who')).toHaveText('Ann Lee')
     await expect(page.getByTestId('transcript')).not.toContainText(/Speaker/)
+    await page.getByTestId('transcript-find-open').click()
     await page.getByTestId('transcript-search').fill('tuesday')
-    await expect(lines).toHaveCount(1)
-    await expect(lines.first()).toContainText('The site goes live on Tuesday')
+    await expect(page.getByTestId('transcript-find-count')).toHaveText('1 of 1')
+    await expect(lines.filter({ hasText: 'Can we go over the launch plan' })).toHaveCount(1)
+    await expect(theirs).toContainText('The site goes live on Tuesday')
     await page.getByTestId('transcript-search').fill('')
     await expect(lines.filter({ hasText: 'Can we go over the launch plan' })).toHaveCount(1)
     await page.getByTestId('chat-open').click()
@@ -354,10 +365,10 @@ test('the recording header keeps status, time and actions while Transcript and A
     await expect(page.getByTestId('chat-panel')).toHaveCount(0)
     await expect(page.getByTestId('share-button')).toBeVisible()
     await expect(page.getByTestId('transcript-close')).toHaveCount(0)
-    await page.getByTestId('transcript-search').focus()
+    await page.getByTestId('transcript-find-open').click()
     await page.keyboard.press('Escape')
     await expect(panel).toBeVisible()
-    await expect(page.getByTestId('transcript-search')).toBeFocused()
+    await expect(page.getByTestId('transcript-find-open')).toBeFocused()
     await page.getByTestId('note-notes-tab').click()
     await expect(panel).toBeHidden()
     await expect(bar).toBeVisible()

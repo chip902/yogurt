@@ -2,19 +2,20 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Dialog } from '@animate-ui/react/primitives/base-ui/dialog'
 import { MotionPopup } from './MotionPopup'
 import { motion, useReducedMotion } from '../motion'
+import { useDialogFocus } from '../useDialogFocus'
 
 export const ModalClose = Dialog.Close
 
 /** Shared accessible dialog with restrained motion and safe initial focus. */
-export function Modal({ title, description, children, onCancel, busy = false, role = 'dialog', testId, container }: {
+export function Modal({ title, description, children, onCancel, busy = false, closing=false, role = 'dialog', testId, container }: {
   title: string; description?: string; children: ReactNode
-  onCancel: () => void; busy?: boolean; role?: 'dialog' | 'alertdialog'; testId?: string
+  onCancel: () => void; busy?: boolean; closing?:boolean; role?: 'dialog' | 'alertdialog'; testId?: string
   container?: HTMLElement | null
 }) {
   const [open, setOpen] = useState(true)
   const reduce = useReducedMotion()
-  const dialog = useRef<HTMLDivElement>(null)
-  const opener = useRef(document.activeElement instanceof HTMLElement ? document.activeElement : null)
+  useEffect(()=>{if(closing)setOpen(false)},[closing])
+  const { popup, popupRef } = useDialogFocus()
   const cancel = useRef(onCancel)
   cancel.current = onCancel
   useEffect(() => {
@@ -29,11 +30,11 @@ export function Modal({ title, description, children, onCancel, busy = false, ro
   }}>
     <Dialog.Portal keepMounted container={container}>
       <Dialog.Backdrop className="app-modal-backdrop no-drag" transition={{ ease: motion.out, duration: (reduce ? motion.micro : motion.surface) / 1000 }} exitTransition={{ ease: motion.out, duration: (reduce ? motion.micro : motion.base) / 1000 }} />
-      <MotionPopup ref={dialog} data-testid={testId} role={role} aria-modal="true" aria-busy={busy || undefined}
-        className="app-modal no-drag" finalFocus={opener} initialFocus={() => {
-          const first = dialog.current?.querySelector<HTMLElement>('[data-dialog-focus], [data-dialog-cancel]')
+      <MotionPopup ref={popupRef} data-testid={testId} role={role} aria-modal="true" aria-busy={busy || undefined}
+        className="app-modal no-drag" finalFocus={false} initialFocus={() => {
+          const first = popup.current?.querySelector<HTMLElement>('[data-dialog-focus], [data-dialog-cancel]')
           if (first instanceof HTMLInputElement) first.select()
-          return first ?? dialog.current
+          return first ?? popup.current
         }}>
         <div className="modal-copy">
           <Dialog.Title>{title}</Dialog.Title>

@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Toast } from '@animate-ui/react/primitives/base-ui/toast'
 import { X } from 'lucide-react'
 import { t } from '../../../shared/i18n'
-import type { SetupState, UpdateStatus } from '../../../shared/types'
+import type { SetupState } from '../../../shared/types'
 import { motion, useReducedMotion } from '../motion'
 import { notesReadyNotice } from '../notesSetup'
 import { changeMeetingRows } from '../meetingRowMotion'
@@ -17,6 +17,13 @@ export function setToastDialog(dialog: HTMLDialogElement | null) {
 type Shown = { ids: string[]; bulk?: boolean; error?: string; /** the note it was moved from: Undo opens it again */ from?: string }
 let show: ((s: Shown) => void) | undefined
 export const toasts = Toast.createToastManager<{ testId?: string; actionTestId?: string }>()
+
+/** A failed action can be retried or dismissed without obscuring the working screen. */
+export function retryToast(id: string, title: string, actionTestId: string, retry: () => Promise<void>, testId = id) {
+  toasts.add({ id, title, timeout: 0, data: { testId, actionTestId },
+    actionProps: { children: t('Try again'), onClick: retry },
+  })
+}
 
 /** Confirm manual audio deletion without changing the retention preference. */
 export async function recordingDeletedToast() {
@@ -82,29 +89,6 @@ export function TrashToast({ go }: { go: (route: string) => void }) {
     remind()
     return off
   }, [])
-  useEffect(() => {
-    // a downloaded version Yogurt has waited a day to install: Restart Yogurt here; X asks again tomorrow
-    let shown: string | undefined, restarting = false
-    const offer = (s: UpdateStatus) => {
-      if (!s.offer || !s.next) { if (shown) toasts.close(shown); shown = undefined; return }
-      if (shown) return
-      const id = shown = toasts.add({
-        id: 'update-ready', title: t('A new version of Yogurt is ready'), timeout: 0,
-        data: { testId: 'update-toast', actionTestId: 'update-restart' },
-        onClose: () => { if (shown !== id) return; shown = undefined; if (!restarting) void window.yogurt.updates.later() },
-        actionProps: { children: t('Restart Yogurt'), onClick: async () => {
-          restarting = true
-          const ok = await window.yogurt.updates.restart().catch(() => false)
-          if (ok) { toasts.close(id); return }
-          restarting = false
-          toasts.update(id, { title: t('Stop the recording first, then try again.') })
-        } },
-      })
-    }
-    const off = window.yogurt.updates.onStatus(offer)
-    void window.yogurt.updates.status().then(offer)
-    return off
-  }, [])
   const previous = useRef<string>(undefined)
   useEffect(() => {
     show = (s) => {
@@ -138,12 +122,13 @@ export function TrashToast({ go }: { go: (route: string) => void }) {
 function ToastList() {
   const reduced = useReducedMotion()
   const { toasts: shown } = Toast.useToastManager<{ testId?: string; actionTestId?: string }>()
+  const front = shown.find(item => item.transitionStatus !== 'ending')
   return shown.map(item => <Toast.Root key={item.id} toast={item} className="app-toast" transition={{ duration: (reduced ? motion.micro : motion.surface) / 1000, ease: motion.softCurve }} exitTransition={{ duration: (reduced ? motion.micro : motion.base) / 1000, ease: motion.out }} swipeDirection={['down', 'right']}
     data-kind={item.data?.testId} data-testid={item.transitionStatus === 'ending' ? undefined : item.data?.testId ?? 'app-toast'}>
     <Toast.Content className="app-toast-content" transition={{ duration: motion.micro / 1000, ease: motion.out }}>
       <Toast.Title className="app-toast-title" />
-      {item.actionProps && <Toast.Action className="app-toast-action" data-testid={item.data?.actionTestId} />}
-      <Toast.Close className="app-toast-close" aria-label={t('Close')}><X size={14} aria-hidden="true" /></Toast.Close>
+      {item.actionProps && <Toast.Action className="workspace-button" data-testid={item.data?.actionTestId} />}
+      <Toast.Close {...(item === front && { 'aria-hidden': false })} className="ghost-btn workspace-icon" aria-label={t('Close')}><X size={14} aria-hidden="true" /></Toast.Close>
     </Toast.Content>
   </Toast.Root>)
 }

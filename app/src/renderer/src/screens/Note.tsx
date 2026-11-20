@@ -1,3 +1,6 @@
+import { InlineError, ReadError } from '../components/InlineError'
+import { TranscriptionControl, TranscriptionNotice } from '../components/Transcription'
+import { transcriptionBusy } from '../../../shared/transcription'
 import { citationTargetIndex } from '../../../shared/citations'
 import { NoteReadingPane } from '../components/NoteReadingPane'
 import type { LibrarySource } from '../../../shared/types'
@@ -7,7 +10,7 @@ import { LoadingContent } from '../components/LoadingContent'
 import { motion, useReducedMotion } from '../motion'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useScrollMemory } from '../useScrollMemory'
-import { AudioLines, Lock, RotateCcw, Trash2, TextAlignStart, TriangleAlert } from 'lucide-react'
+import { AudioLines, Lock, RotateCcw, Trash2, TextAlignStart } from 'lucide-react'
 import type { MeetingView, NoteSaveResult, NoteSide, NoteView, SetupState, WidgetView } from '../../../shared/types'
 import { t } from '../../../shared/i18n'
 import { osWords } from '../keys'
@@ -24,7 +27,8 @@ import { Mic, Pause, Play, Sparkles, Loader } from '../components/Icons'
 import { ShareMenu } from '../components/ShareMenu'
 import { NoteMenu, summaryAction } from '../components/NoteMenu'
 import { DeleteNote } from '../components/DeleteNote'
-import { moveToTrash } from '../components/TrashToast'
+import { openAudioUpload } from '../components/AudioUpload'
+import { moveToTrash, toasts } from '../components/TrashToast'
 import { useSummaryPresentation } from '../summaryPresentation'
 import { useSmoothText } from '../useSmoothText'
 import { NoteAutosave, registerAutosave } from '../noteAutosave'
@@ -35,7 +39,6 @@ import { SpokenMenu } from '../components/SpokenMenu'
 import { RecordingHint } from '../components/RecordingHint'
 import { FolderChip, FolderPicker, type FolderSuggestion } from '../components/FolderPicker'
 import { FolderName } from '../components/FolderDialogs'
-import { InlineError } from '../components/InlineError'
 import { Swap, SwapText } from '../components/Swap'
 
 /** A revision is dirty until main acknowledges it; failed text also remains there across navigation/reload. */
@@ -61,6 +64,11 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
   folderSuggestion?: FolderSuggestion
   onResumeRequested?: () => void
 }) {
+  const [meetingReadFailed, setMeetingReadFailed] = useState(false)
+  const [notesReadFailed, setNotesReadFailed] = useState(false)
+  const retryMeeting = useRef<() => void>(() => {})
+  const retryNotes = useRef<() => void>(() => {})
+  const retryRead = () => { if (meetingReadFailed) retryMeeting.current(); if (notesReadFailed) retryNotes.current() }
   const [m, setM] = useState<MeetingView>()
   const [footer, setFooter] = useState<HTMLElement | null>(null)
   useLayoutEffect(() => {
@@ -95,8 +103,9 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
     }
     const off = window.yogurt.transcript.onSegment(line => { if (line.meetingId === id && line.text.trim()) { revision++; setHasTranscript(true) } })
     const changed = window.yogurt.transcript.onSpeakers(meetingId => { if (meetingId === id) load() })
+    const replaced=window.yogurt.transcript.onReplaced?.(meetingId=>{if(meetingId===id)load()})
     load()
-    return () => { active = false; off(); changed() }
+    return () => { active = false; off(); changed();replaced?.() }
   }, [id])
   useEffect(() => {
     let active = true, received = false
@@ -174,9 +183,18 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
   }, [id, isRecording])
 
   useEffect(() => {
-    const load = () => void window.yogurt.meetings.get(id).then(setM)
-    load()
-    return window.yogurt.meetings.onChange(load)
+    let version = 0
+    const load = () => {
+      const request = ++version
+      void window.yogurt.meetings.get(id).then(value => {
+        if (request !== version) return
+        setMeetingReadFailed(!value)
+        if (value) setM(value)
+      }, () => { if (request === version) setMeetingReadFailed(true) })
+    }
+    setMeetingReadFailed(false); retryMeeting.current = load; load()
+    const off = window.yogurt.meetings.onChange(load)
+    return () => { version++; off() }
   }, [id])
 
   useEffect(() => {
@@ -195,9 +213,15 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
       // Enhanced once there is something to show there, unless they chose, or are typing in their own notes
       if (v.status !== 'idle' && !picked.current && !typing.current) setView('enhanced')
     }
-    const off = window.yogurt.notes.onChange((v) => { if (v.meetingId === id) show(v) })
-    void window.yogurt.notes.get(id).then(show)
-    return off
+    let version = 0
+    const off = window.yogurt.notes.onChange(v => { if (v.meetingId === id) { version++; setNotesReadFailed(false); show(v) } })
+    const load = () => {
+      const request = ++version
+      void window.yogurt.notes.get(id).then(v => { if (request === version) { setNotesReadFailed(false); show(v) } },
+        () => { if (request === version) setNotesReadFailed(true) })
+    }
+    setNotesReadFailed(false); retryNotes.current = load; load()
+    return () => { version++; off() }
   }, [id])
 
   useEffect(() => { current.current = notes }, [notes])
@@ -245,7 +269,12 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
     if (m.trashedAt == null && !m.stopSavePending && (m.state === 'stopped' || m.state === 'done')) void resumeRecording()
   }, [onResumeRequested, m, notes, summarizing, starting])
 
-  if (!m || !notes) return <LoadingContent pending skeleton={<Loading layout="note" />} className="loading-note-frame" />
+  const [hasAudio,setHasAudio]=useState(false)
+  useEffect(()=>{let active=true;const load=()=>void window.yogurt.audio.tracks(id).then(tracks=>{if(active)setHasAudio(!!tracks.length)});load();const off=window.yogurt.meetings.onChange(load);return()=>{active=false;off()}},[id])
+  const openedTranscription=useRef<string | undefined>(undefined)
+  useLayoutEffect(()=>{if(m&&openedTranscription.current!==id){openedTranscription.current=id;if(transcriptionBusy(m.transcriptionState))setPrimary('transcript')}},[m,id])
+  const readFailed = meetingReadFailed || notesReadFailed
+  if (!m || !notes) return readFailed ? <ReadError testId="note-read-error" retry={retryRead} /> : <LoadingContent pending skeleton={<Loading layout="note" />} className="loading-note-frame" />
   const recording = m.state === 'recording'
   /** in the Trash: it can be read and restored, not recorded into */
   const trashed = m.trashedAt != null
@@ -321,7 +350,11 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
     void window.yogurt.notes.writeAgain(id, note)
   }
   const hasSummary = !!notes.enhanced?.trim()
+  const transcribing=transcriptionBusy(m.transcriptionState)
+  const runTranscript=async(again=false)=>{if(!await saveAll())return;try{const started=await window.yogurt.transcript.run(id,again);if(started)setPrimary('transcript')}catch{toasts.add({title:t("Yogurt couldn't transcribe this file.")})}}
+  const transcriptReason=recording||m.stopSavePending?t('Available after recording'):transcribing?t('Transcribing…'):summarizing?t('Summarizing…'):!hasAudio?t('Audio is unavailable.'):undefined
   const generation = summaryAction({ hasSummary, hasContent: hasTranscript || !!notes.mine.trim(), recording, busy: summarizing, downloading: !!(setup?.notesDownloading || setup?.notesError), trashed })
+  if(generation&&transcribing)generation.reason=t('Transcribing…')
   const requestRewrite = () => {
     if (!generation || generation.reason) return
     if (hasSummary) setRewriteOpen(true)
@@ -329,17 +362,17 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
   }
 
   return (
-    <LoadingContent pending={false} skeleton={<Loading layout="note" />} className="loading-note-frame"><div data-testid="note" className="document-main relative flex h-full bg-bg">
+    <LoadingContent onReady={()=>document.dispatchEvent(new CustomEvent('audio-upload-note-ready',{detail:id}))} pending={false} skeleton={<Loading layout="note" />} className="loading-note-frame"><div data-testid="note" className="document-main relative flex h-full bg-bg">
       {resumeConfirm && <Modal testId="resume-confirm" role="alertdialog" title={t('Record more in this note?')}
         description={t('Your notes, transcript, and previous audio are kept. Your edited summary will be replaced when you finish recording.')}
         onCancel={() => setResumeConfirm(false)}>
         <div className="modal-actions">
           <button data-testid="resume-yes" onClick={() => void resumeRecording(true)} className="modal-button primary">{t('Resume recording')}</button>
-          <ModalClose data-dialog-cancel data-testid="resume-cancel" className="modal-button">{t('Cancel')}</ModalClose>
+          <ModalClose data-dialog-cancel data-testid="resume-cancel" className="workspace-button">{t('Cancel')}</ModalClose>
         </div>
       </Modal>}
       <div data-testid="note-topbar" className="note-topbar no-drag fixed end-4 top-[10px] z-[60]">
-          <NoteMenu key={id} generation={generation} hasSummary={hasSummary} edited={notes.edited || editedHere} rewriteOpen={rewriteOpen} setRewriteOpen={setRewriteOpen}
+          <NoteMenu key={id} transcription={{reason:transcriptReason,run:()=>void runTranscript(true)}} generation={generation} hasSummary={hasSummary} edited={notes.edited || editedHere} rewriteOpen={rewriteOpen} setRewriteOpen={setRewriteOpen}
             onWriteAgain={(note) => { if (!generation || generation.reason) return; pickPrimary('notes'); pick('enhanced'); void writeAgain(note) }} recording={recording} savePending={m.stopSavePending} trashed={trashed} onRename={() => setRenaming(true)} onDelete={() => { void saveAll().then((saved) => { if (!saved) return; if (trashed) setDeleting(true); else void moveToTrash(id, `/note/${id}`) }) }}
             folders={(close) => <FolderPicker testId="note-menu-folders" meetingId={id} onNew={() => { close(); setNamingFolder(true) }} />} />
       </div>
@@ -368,15 +401,16 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
                   </button>
                 </>}
                 {finishing && <span data-testid="note-finishing" role="status" className="note-finishing">{t('Finishing…')}</span>}
-                {!finishing && (m.state === 'stopped' || m.state === 'done') && !m.stopSavePending && !trashed && <button data-testid="note-resume" disabled={starting} aria-busy={summarizing} data-processing={summarizing} onClick={() => { if (summarizing) void window.yogurt.notes.stop(id).catch(console.error); else void resumeRecording() }}
-                  aria-label={summarizing ? t('Stop summary') : t('Resume recording')} className="note-record-action note-resume-action" title={summarizing ? t('Stop summary') : t('Resume recording in this note')}>
+                {!transcribing && !finishing && (m.source !== 'audio-file' || summarizing) && (m.state === 'stopped' || m.state === 'done') && !m.stopSavePending && !trashed && <button data-testid="note-resume" disabled={starting} aria-busy={summarizing} data-processing={summarizing} onClick={() => { if (summarizing) void window.yogurt.notes.stop(id).catch(console.error); else void resumeRecording() }}
+                  aria-label={summarizing ? t('Stop summary') : t('Resume recording')} className="workspace-button note-resume-action" title={summarizing ? t('Stop summary') : t('Resume recording in this note')}>
                   <Swap show={summarizing ? 'busy' : 'mic'} options={{ mic: <Mic size={14} />, busy: <span className="summary-stop-icon"><Loader size={14} /><span className="summary-stop-square" /></span> }} />
-                  <SwapText text={summarizing ? t('Summarizing…') : starting ? t('Preparing…') : t('Resume recording')} widest={t('Resume recording')} />
+                  <SwapText text={summarizing ? t('Summarizing…') : starting ? t('Preparing…') : t('Resume recording')} />
                 </button>}
                 {m.state === 'prepared' && !trashed && <button data-testid="note-start" disabled={starting} onClick={() => { void startPrepared() }} className="note-record-action primary">
                   <Mic size={14} strokeWidth={1.75} aria-hidden="true" />{starting ? t('Starting…') : t('Start recording')}
                 </button>}
               </div>
+              {transcribing&&<TranscriptionControl state={m.transcriptionState!} onStop={()=>void window.yogurt.transcript.stop(id).catch(()=>toasts.add({title:t("Yogurt couldn't transcribe this file.")}))}/>}
               <ShareMenu id={id} shown={shown} status={notes.status} hasEnhanced={notes.enhanced != null} beforeUse={saveAll} />
             </div>
           </div>
@@ -409,6 +443,7 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
             <span data-testid="note-tab-indicator" className="note-tab-indicator" aria-hidden="true" />
           </div>
         </header>
+        {readFailed && <InlineError testId="note-read-error" retry={retryRead} />}
         <div ref={setChatAnchor} className="note-reading-area">
           <div ref={panels} className="note-panels">
           <NoteReadingPane active={primary === 'notes'} summary={shown === 'enhanced'} generating={shown === 'enhanced' && ['waiting', 'rewriting', 'handoff', 'reset', 'streaming'].includes(summaryState)} resetting={shown === 'enhanced' && summaryState === 'reset'} writing={shown === 'enhanced' && summaryState === 'streaming'} scroll={readingScroll}>
@@ -419,22 +454,27 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
                 /> : <Enhanced key={id} presentation={summaryState} focus={primary === 'notes' && at?.ms === null ? at : undefined} notes={notes} disabled={starting} onChange={(md) => { setEditedHere(true); const next = { ...current.current!, enhanced: md }; current.current = next; setNotes(next); enhancedSave.change(md) }} onBlur={enhancedSave.flush} onRetry={requestRewrite} />}
           </NoteReadingPane>
           {(primary === 'transcript' || transcriptVisited) && <section hidden={primary !== 'transcript'} id="note-transcript-panel" role="tabpanel" aria-labelledby="note-transcript-tab" className="note-content note-transcript-pane">
-            <Transcript id={id} recording={recording} active={primary === 'transcript'} inline toolbar={transcriptToolbar} focus={at?.ms != null ? { ...at, ms: at.ms } : undefined} />
+            <Transcript notice={
+              hasAudio && (m.transcriptionPending || !hasTranscript) || m.transcriptionState === 'waiting-model' || m.transcriptionState === 'waiting-recording'
+                ? <TranscriptionNotice state={m.transcriptionState} hasLines={hasTranscript} onContinue={() => void runTranscript()} disabled={recording || !!m.stopSavePending} />
+                : !hasAudio && m.transcriptionState === 'error'
+                  ? <InlineError testId="upload-preparation-failed"><span>{t("Yogurt couldn't read this audio file.")}</span><button className="workspace-button" onClick={() => void openAudioUpload()}>{t('Upload a file')}</button></InlineError>
+                  : null
+            } id={id} processing={transcribing} replacing={!!m.transcriptionAgain} recording={recording} active={primary === 'transcript'} inline toolbar={transcriptToolbar} focus={at?.ms != null ? { ...at, ms: at.ms } : undefined} />
           </section>}
           </div>
         </div>
         <footer ref={setFooter} className="note-footer">
             {m.stopSavePending && (
-              <div data-testid="note-stop-unsaved" role="alert" className="mt-5 flex flex-wrap items-start gap-3 rounded-xl border border-line bg-card px-4 py-3 text-[13px] leading-relaxed">
-                <TriangleAlert size={16} aria-hidden="true" className="mt-0.5 shrink-0 text-danger" />
-                <p className="min-w-48 flex-1">{t("Recording stopped. Yogurt couldn't save when it ended. Keep Yogurt open and try again.")}</p>
-                <button data-testid="note-stop-retry" disabled={retryingStop} className="bar-btn rounded-md border border-line bg-bg px-3 py-1 text-ink disabled:opacity-50" onClick={() => {
+              <InlineError testId="note-stop-unsaved" className="mt-5">
+                <span>{t("Recording stopped. Yogurt couldn't save when it ended. Keep Yogurt open and try again.")}</span>
+                <button data-testid="note-stop-retry" disabled={retryingStop} className="workspace-button" onClick={() => {
                   setRetryingStop(true)
                   void window.yogurt.meetings.retryStopSave(id).then((saved) => {
                     if (saved) transcriptButton.current?.focus({ preventScroll: true })
                   }).catch(() => {}).finally(() => setRetryingStop(false))
                 }}>{retryingStop ? t('Saving…') : t('Try again')}</button>
-              </div>
+              </InlineError>
             )}
           {primary === 'notes' && shown === 'enhanced' && notes.status === 'done' && notes.peopleChanged && !rewriteOpen && (
             <div data-testid="note-people-changed" className="pointer-events-auto mx-auto mt-3 flex w-fit max-w-[calc(100%-32px)] flex-wrap items-center gap-3 rounded-xl border border-line bg-float px-4 py-2 text-[13px] shadow-[var(--shadow)]">
@@ -443,9 +483,9 @@ export function Note({ id, onTitleChange, at, folderSuggestion, onSource, onResu
             </div>
           )}
           {saveStatus === 'failed' && (
-            <InlineError testId="note-save-status" warningTestId="note-save-warning" className="pointer-events-auto mx-auto mt-3 w-fit max-w-[calc(100%-32px)]">
-              <span>{mineSave.reason === 'too-long' || enhancedSave.reason === 'too-long' ? t('This note is too long to save. Shorten it and try again.') : t("Couldn't save your changes")}</span>
-              <button data-testid="note-save-retry" className="inline-error-action" onClick={() => { void saveAll() }}>{t('Try again')}</button>
+            <InlineError testId="note-save-status" className="pointer-events-auto mx-auto mt-3 w-fit max-w-[calc(100%-32px)]">
+              <span data-testid="note-save-warning">{mineSave.reason === 'too-long' || enhancedSave.reason === 'too-long' ? t('This note is too long to save. Shorten it and try again.') : t("Couldn't save your changes")}</span>
+              <button data-testid="note-save-retry" className="workspace-button" onClick={() => { void saveAll() }}>{t('Try again')}</button>
             </InlineError>
           )}
           {startFailed && <p role="alert" className="pointer-events-auto mx-auto mt-3 w-fit text-[13px] text-danger">{t("Yogurt couldn't start the notes. Try again in a moment.")}</p>}
@@ -484,7 +524,7 @@ function Title({ id, title, editing, onEdit }: { id: string; title: string; edit
   if (!editing) {
     return (
       <h1 data-testid="note-title" className={cls}>
-        <button onClick={() => onEdit(true)} title={t('Rename')} className="note-title-btn -mx-1 max-w-full rounded-lg px-1 text-start">{title}</button>
+        <button onClick={() => onEdit(true)} title={t('Rename')} className="note-title-btn -mx-1 rounded-lg px-1 text-start">{title}</button>
       </h1>
     )
   }
@@ -496,7 +536,7 @@ function Title({ id, title, editing, onEdit }: { id: string; title: string; edit
     <input data-testid="note-title-input" aria-label={t('Title')} autoFocus value={draft} maxLength={200}
       onFocus={(e) => e.currentTarget.select()} onChange={(e) => setDraft(e.target.value)} onBlur={done}
       onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); else if (e.key === 'Escape') { cancelled.current = true; e.currentTarget.blur() } }}
-      className={`${cls} -mx-1 rounded-lg bg-transparent px-1 outline-none ring-1 ring-line focus:ring-accent`} />
+      className={`${cls} -mx-1 rounded-lg bg-transparent px-1 outline-none ring-1 ring-line focus-visible:ring-accent`} />
   )
 }
 
@@ -520,7 +560,7 @@ function Enhanced({ notes, presentation, disabled, onChange, onBlur, onRetry, fo
     return (
       <InlineError testId="note-enhanced-failed">
         <span>{t("Yogurt couldn't generate this summary.")}</span>
-        <button onClick={onRetry} className="inline-error-action">{t('Try again')}</button>
+        <button onClick={onRetry} className="workspace-button">{t('Try again')}</button>
       </InlineError>
     )
   }
@@ -542,7 +582,7 @@ function Enhanced({ notes, presentation, disabled, onChange, onBlur, onRetry, fo
     <div data-testid="note-enhanced" data-status={status} className={presentation === 'streaming' ? 'streaming' : ''}>
       {status === 'failed' && <InlineError testId="note-enhanced-rewrite-failed" className="mb-6">
         <span>{t("Yogurt couldn't regenerate the summary, so your previous version is still shown.")}</span>
-        <button onClick={onRetry} className="inline-error-action">{t('Try again')}</button>
+        <button onClick={onRetry} className="workspace-button">{t('Try again')}</button>
       </InlineError>}
       {rewriting && <SummaryWaiting outline={false} part={status === 'writing' ? notes.part : undefined} />}
       <div ref={surface} className="summary-rewrite" data-rewriting={rewriting} data-handoff={handoff} data-resetting={presentation === 'reset'} style={handoff ? { minHeight: height.current } : undefined}>

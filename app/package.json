@@ -1,6 +1,6 @@
 {
   "name": "@yogurt/app",
-  "version": "0.3.38",
+  "version": "0.3.56",
   "private": true,
   "type": "module",
   "main": "out/main/index.js",
@@ -15,6 +15,7 @@
   "dependencies": {
     "chrono-node": "2.10.3",
     "electron-updater": "6.8.10",
+    "ical.js": "2.2.1",
     "node-llama-cpp": "3.22.1"
   },
   "devDependencies": {

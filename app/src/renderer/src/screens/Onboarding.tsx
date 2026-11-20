@@ -5,6 +5,7 @@ import { screensOf, viaSystemSettings, type OnboardingScreen } from '../../../sh
 import { Wordmark } from '../components/Logo'
 import { ReadyArt, ScreenArt, WelcomeArt } from '../components/OnboardingArt'
 import { SettingsArt } from '../components/SettingsGuide'
+import { CalendarLinkForm } from '../components/CalendarLinkForm'
 import { SetupStatus, transcriptionPhase, transcriptionPercent } from '../components/SetupStatus'
 import { permissionCopy, screenCopy } from '../permissionCopy'
 import { usePermissionFlow } from '../permissionFlow'
@@ -32,7 +33,9 @@ export function Onboarding({ state, plan, onDone }: { state: SetupState; plan: O
   return (
     <div data-testid="onboarding" data-phase={state.phase} data-stage={stage} className="setup-screen">
       {stage === 'intro' ? <Welcome state={state} progress={progress} onDone={introDone} />
-        : stage === 'steps' && screen ? <PermissionScreen key={screen.id} screen={screen} state={state} progress={progress} onNext={next} />
+        : stage === 'steps' && screen ? (screen.id === 'calendar' && window.yogurt.capabilities.calendarLink
+          ? <CalendarLinkScreen key={screen.id} state={state} progress={progress} onNext={next} />
+          : <PermissionScreen key={screen.id} screen={screen} state={state} progress={progress} onNext={next} />)
           : <Ready state={state} />}
     </div>
   )
@@ -102,6 +105,29 @@ function Welcome({ state, progress, onDone }: { state: SetupState; progress: Pro
 }
 
 /**
+ * Windows and Linux: the calendar screen asks for a calendar link instead of a permission, with the very form Settings
+ * shows (CalendarLinkForm), so the steps for Google and Outlook are written once.
+ */
+function CalendarLinkScreen({ state, progress, onNext }: { state: SetupState; progress: Progress; onNext(): void }) {
+  const [connected, setConnected] = useState<string | null>(null)
+  const sc = screenCopy('calendar')
+  const primary = useRef<HTMLButtonElement>(null)
+  useFocus(primary, [connected])
+  return (
+    <Layout
+      testId="onboarding-step" step="calendar" kind="calendar" motionKey={connected ? 'calendar-done' : 'calendar'}
+      art={<ScreenArt id="calendar" on={connected ? ['calendar'] : []} />} progress={progress} state={state}
+      title={connected ? t('All set') : t('Connect your calendar')}
+      text={connected ? t('{name} is connected. You can change this any time in Settings.', { name: connected }) : sc.text}
+      actions={connected
+        ? <button ref={primary} data-testid="step-allow" onClick={onNext} className="ob-button primary no-drag">{t('Continue')}</button>
+        : <CalendarLinkForm variant="onboarding" onConnected={setConnected} onCancel={onNext}
+          extra={<button type="button" data-testid="step-later" onClick={onNext} className="ob-button quiet no-drag">{t('Not now')}</button>} />}
+    />
+  )
+}
+
+/**
  * One screen of permissions, asked one after the other: one Allow asks for the mic, then straight away for the call
  * audio. One turned off before waits for a click instead, since only System Settings can turn it on.
  */
@@ -154,7 +180,7 @@ function Ask({ screen, step, lit, chained, leaving, state, progress, onOn, onLat
           onClick={() => (back ? onOn() : away ? void flow.openSettings() : void flow.allow())} className="ob-button primary no-drag">
           {flow.phase === 'asking' && <LoaderCircle size={14} aria-hidden="true" className="animate-spin motion-reduce:animate-none" />}{label}
         </button>
-        {!back && <button data-testid="step-later" disabled={busy} onClick={onLater} className="ob-button quiet no-drag">{t('Not now')}</button>}
+        {!back && <button data-testid="step-later" disabled={busy} onClick={onLater} className="text-action no-drag">{t('Not now')}</button>}
       </>}
     />
   )
@@ -171,7 +197,7 @@ function GuideNote({ kind }: { kind: PermissionKind }) {
         <div className="ob-guide-help-content">
         {(kind === 'accessibility' || kind === 'systemAudio') && <p>{t('Not in the list? Click +, then choose Yogurt in Applications.')}</p>}
         <p>{t('If you turned access on and this stays open, restart Yogurt.')}</p>
-        <button data-testid="settings-guide-relaunch" className="ob-button secondary no-drag" onClick={() => {
+        <button data-testid="settings-guide-relaunch" className="workspace-button no-drag" onClick={() => {
           void window.yogurt.permissions.relaunch().then((ok) => setFailed(!ok), () => setFailed(true))
         }}>{t('Restart Yogurt')}</button>
       </div>

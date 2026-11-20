@@ -1,3 +1,4 @@
+import { InlineError } from './InlineError'
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Popover } from '@base-ui/react/popover'
@@ -38,6 +39,8 @@ export function AskConversation({ id, pendingDraftKey, initial, loadError = fals
   const [text, setText] = useState((pendingDraftKey ? drafts.get(pendingDraftKey) : undefined) ?? drafts.get(id) ?? initial?.draft ?? '')
   const edited = useRef(false)
   const [error, setError] = useState(false)
+  const [readFailed, setReadFailed] = useState(false)
+  const retryRead = useRef<() => void>(() => {})
   const [sending, setSending] = useState(false)
   const pendingQuestion = useRef<string>(undefined)
   const [changing, setChanging] = useState(false)
@@ -84,6 +87,7 @@ export function AskConversation({ id, pendingDraftKey, initial, loadError = fals
   const scroll = useScrollMemory<HTMLDivElement>(scrollKey, !!chat)
   const content = useRef<HTMLDivElement>(null)
   const follow = useFollowLatest(scroll, content, !!chat, rememberedScroll(scrollKey) === undefined)
+  const loadingChat = !chat && !error && !readFailed && !loadError
   const prefix = panel ? 'chat' : 'chat-page'
   useEffect(() => {
     if (!id) return
@@ -98,25 +102,28 @@ export function AskConversation({ id, pendingDraftKey, initial, loadError = fals
         if (drafts.get(id) === pending) drafts.delete(id)
       }).catch(() => { if (active) setError(true) })
     }
-    const off = window.yogurt.conversations.onChange(v => { if (v.id === id) { revision++; setChat(v) } })
+    const off = window.yogurt.conversations.onChange(v => { if (v.id === id) { revision++; setReadFailed(false); setChat(v) } })
     const load = (first = false) => {
+      setReadFailed(false)
       const request = ++revision
       void window.yogurt.conversations.get(id).then(v => {
         if (!active) return
         if (!v) throw new Error('Conversation not found')
-        if (request === revision) setChat(v)
+        if (request !== revision) return
+        setChat(v)
         if (first) {
           if (!initial && !edited.current) setText(drafts.get(id) ?? v.draft)
         }
       }).catch(() => {
         if (active && request === revision) {
-          setError(true)
+          setReadFailed(true)
           if (pendingQuestion.current !== undefined) { pendingQuestion.current = undefined; setSending(false) }
         }
       })
     }
     const offMeetings = window.yogurt.meetings.onChange(() => load())
     const offFolders = window.yogurt.folders.onChange(() => load())
+    retryRead.current = () => load(true)
     load(true)
     return () => { active = false; off(); offMeetings(); offFolders() }
   }, [id])
@@ -214,7 +221,7 @@ export function AskConversation({ id, pendingDraftKey, initial, loadError = fals
     }).catch(() => { saveText(q); setError(true) }).finally(() => setSending(false))
   }
   const send = (q: string) => {
-    if (!q.trim() || sending || changing || answering || loadError || (!chat && (!panel || error))) return
+    if (!q.trim() || sending || changing || answering || loadError || readFailed || (!chat && (!panel || error))) return
     keepTyping()
     follow.resume(); setSending(true); setError(false); setMention(undefined); setSelector(undefined)
     // Typing is available before the conversation loads; Enter must survive that handoff too.
@@ -263,7 +270,7 @@ export function AskConversation({ id, pendingDraftKey, initial, loadError = fals
   </button>
   const results = <>
     {!!offset && <>
-      {!!scoped.length && <div role="group" aria-label={t('In this chat')}><h3>{t('In this chat')}<button type="button" className="ask-picker-clear" disabled={busy}
+      {!!scoped.length && <div role="group" aria-label={t('In this chat')}><h3>{t('In this chat')}<button type="button" className="text-action ask-picker-clear" disabled={busy}
         onMouseDown={e => e.preventDefault()} onClick={() => void remove(chips)}>{t('Clear')}</button></h3>
         {scoped.map((c, i) => targetRow(c, i))}
         {!!scopeMore && <button type="button" role="option" tabIndex={-1} aria-selected={false} data-active={selected === offset - 1 || undefined} id={`${prefix}-context-${offset - 1}`}
@@ -286,23 +293,26 @@ export function AskConversation({ id, pendingDraftKey, initial, loadError = fals
       <h2 id={panel ? 'meeting-chat-title' : undefined} title={[chat?.title || t('New chat'), ...(chat?.chips.map(chipTitle) ?? [])].join('\n')}>{chat?.title || t('New chat')}</h2>
       <div className="ask-header-actions">
         {chat && <ConversationActions id={id} title={chat.title} onNew={fresh} onDeleted={onDeleted} />}
-        {onExpand && <button type="button" data-testid="chat-expand" className="chat-icon" onClick={onExpand} aria-label={t('Open in Ask')} title={t('Open in Ask')}><Maximize2 size={15} aria-hidden="true" /></button>}
-        {onClose && <button type="button" data-testid="chat-close" className="chat-icon" onClick={onClose} aria-label={t('Close')} title={t('Close')}><X size={16} aria-hidden="true" /></button>}
+        {onExpand && <button type="button" data-testid="chat-expand" className="ghost-btn workspace-icon" onClick={onExpand} aria-label={t('Open in Ask')} title={t('Open in Ask')}><Maximize2 size={15} aria-hidden="true" /></button>}
+        {onClose && <button type="button" data-testid="chat-close" className="ghost-btn workspace-icon" onClick={onClose} aria-label={t('Close')} title={t('Close')}><X size={16} aria-hidden="true" /></button>}
       </div>
     </header>}
     <div className="ask-thread-wrap">
       <ScrollFade><div className={`ask-thread${panel ? " chat-history" : ""}${unsent ? ' ask-thread-empty' : ''}`} ref={scroll}>
         <div ref={content} className="ask-thread-content">
-        <LoadingContent pending={!chat && !error} skeleton={<Loading layout="chat" testId="chat-thread-loading" />}>
+        <LoadingContent pending={loadingChat} skeleton={<Loading layout="chat" testId="chat-thread-loading" />}>
         {!landing && turns.map(turn => <Turn key={turn.id} showCopy={turn === last} turn={turn} chat={chat!} panel={panel} onSource={onSource} onRetry={() => send(turn.question)} />)}
         {panel && suggestions}</LoadingContent>
         </div>
       </div></ScrollFade>
-      {follow.behind && <button className="chat-latest" data-testid="chat-latest" aria-label={t('Back to latest')} onClick={follow.latest}><ArrowDown size={15} /></button>}
+      {follow.behind && <button className="workspace-button workspace-icon chat-latest" data-testid="chat-latest" aria-label={t('Back to latest')} onClick={follow.latest}><ArrowDown size={15} /></button>}
     </div>
     <div className={`ask-composer${panel ? ' chat-composer' : ''}`}>
+      {readFailed && <InlineError testId="conversation-read-error"><span>{t("Couldn't load this conversation.")}</span>
+        <button className="workspace-button" data-testid="conversation-load-retry" onClick={() => retryRead.current()}>{t('Try again')}</button>
+      </InlineError>}
       {error && <p data-testid={panel ? "chat-send-error" : "chat-page-error"} role="alert" className="chat-error">{t("Couldn't save your changes")}</p>}
-      <LoadingContent pending={!panel && !chat && !error} onReady={() => { if (chat) input.current?.focus({ preventScroll: true }) }} testId={landing ? "chat-loading" : undefined}><form ref={composer} className="ask-box" data-busy={busy || undefined} data-testid={`${prefix}-box`} onSubmit={e => { e.preventDefault(); send(text) }} onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget)) setMention(undefined) }}>
+      <LoadingContent pending={!panel && loadingChat} onReady={() => { if (chat) input.current?.focus({ preventScroll: true }) }} testId={landing ? "chat-loading" : undefined}><form ref={composer} className="ask-box" data-busy={busy || undefined} data-testid={`${prefix}-box`} onSubmit={e => { e.preventDefault(); send(text) }} onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget)) setMention(undefined) }}>
         <div className="ask-field">
         <textarea autoFocus={panel} ref={input} id={panel ? 'meeting-question' : 'library-question'} data-testid={`${prefix}-input`} rows={1} maxLength={4000}
           placeholder={landing ? undefined : panel ? t('Ask anything') : t('Ask about your meetings')} aria-label={panel ? t('Ask anything') : t('Ask about your meetings')} value={text} disabled={!panel && !chat} readOnly={sending || changing}
@@ -359,11 +369,11 @@ function Turn({ turn, chat, panel, showCopy, onSource, onRetry }: { showCopy: bo
       ? <NotesModelWait downloading={percent => <p role="status" className="text-sm text-muted">{t("Your question is waiting for Yogurt's AI to download.")} <span className="whitespace-nowrap">{percent}</span></p>}><p role="status" className="text-sm text-muted">{t('Getting ready to answer. Yogurt is still setting up.')}</p></NotesModelWait>
       : <p className="chat-progress" role="status">{chat.waitsForMeeting && turn.status === 'waiting' ? t('Yogurt will answer once the meeting ends.') : <><ThinkingDots /><StepText step={turn.status === 'waiting' ? undefined : turn.step} /></>}</p>)}
     {answer && <div data-testid={`${prefix}-answer`} dir="auto" data-streaming={live || undefined} className={`note-prose chat-answer${live ? ' stream-caret' : ''}`}><AnswerText md={answer} live={live} sources={turn.sources} onSource={onSource} /></div>}
-    {answer && !live && <div className="chat-answer-actions"><button className="chat-copy-action" data-testid="chat-copy-answer" aria-label={copied ? t('Copied') : t('Copy answer')} onClick={() => {
+    {answer && !live && <div className="chat-answer-actions"><button className="ghost-btn chat-copy-action" data-testid="chat-copy-answer" aria-label={copied ? t('Copied') : t('Copy answer')} onClick={() => {
       void navigator.clipboard.writeText(turn.answer).then(() => { setCopied(true); setFailed(false) }).catch(() => setFailed(true))
     }}><Swap show={copied ? 'done' : 'copy'} options={{ copy: <Copy size={13} />, done: <Check size={13} /> }} /><SwapText text={copied ? t('Copied') : t('Copy')} widest={t('Copied')} /></button>{turn.scope && <AnswerScope chips={turn.scope} />}<span role="status" className={failed ? 'text-danger' : 'sr-only'}>{failed ? t("Yogurt couldn't copy.") : copied ? t('Copied') : ''}</span></div>}
     {turn.status === 'stopped' && <p className="text-xs text-muted">{answer ? t('Stopped') : t('Stopped before answering')}</p>}
-    {turn.status === 'failed' && <p role="alert">{t("Yogurt couldn't answer that.")} <button className="ghost-btn" onClick={onRetry}>{t('Try again')}</button></p>}
+    {turn.status === 'failed' && <InlineError testId="chat-answer-error"><span>{t("Yogurt couldn't answer that.")}</span><button type="button" className="workspace-button" onClick={onRetry}>{t('Try again')}</button></InlineError>}
   </div>
 }
 

@@ -22,11 +22,14 @@ test('Stop summary preserves a saved rewrite and the header label stays still on
     await page.evaluate(id => window.yogurt.notes.writeAgain(id), id)
     const button = page.getByTestId('note-resume')
     await expect(button).toHaveText('Summarizing…')
+    // the button eases to its label's width first; measure once the label's box has reached the words' own width
+    await expect.poll(() => button.locator('.swap-text').evaluate(el => Math.abs(el.getBoundingClientRect().width - el.firstElementChild!.getBoundingClientRect().width) < 0.5)).toBe(true)
     const width = (await button.boundingBox())!.width
     await button.hover()
     await expect(button).toHaveAccessibleName('Stop summary')
     await expect(button).toHaveText('Summarizing…')
-    expect((await button.boundingBox())!.width).toBe(width)
+    // the same width, give or take how a display rounds the words (#93: 0.4 px apart on an M5's built-in screen)
+    expect(Math.abs((await button.boundingBox())!.width - width)).toBeLessThan(1)
     await button.focus()
     await expect(page.locator('.summary-stop-square')).toHaveCSS('opacity', '1')
     await button.press('Enter')

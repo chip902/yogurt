@@ -52,6 +52,10 @@ async function expectClear(page: Page) {
 }
 
 async function expectQuietLayout(page: Page, upgrading: boolean, failed: boolean) {
+  if (upgrading) {
+    await expect(page.getByTestId('notes-setup-skip')).toHaveCSS('font-size', '12px')
+    await expect(page.getByTestId('notes-setup-skip')).toHaveCSS('line-height', '18px')
+  }
   const popup = page.getByTestId('notes-setup')
   await expect(popup).toHaveCSS('width', '408px')
   await expect(popup.locator('.notes-download-progress')).toHaveCSS('height', '3px')
@@ -219,10 +223,18 @@ test('AI status stays on every workspace page and clears recording and More in n
           const popup = page.getByTestId('notes-setup')
           await expect(popup).toBeVisible()
           const box = (await trigger.boundingBox())!, panel = (await popup.boundingBox())!
+          const width = await page.evaluate(() => innerWidth)
           expect(panel.x).toBeGreaterThanOrEqual(12)
-          expect(panel.x + panel.width).toBeLessThanOrEqual((await page.evaluate(() => innerWidth)) - 12)
+          expect(panel.x + panel.width).toBeLessThanOrEqual(width - 12)
           expect(panel.y).toBeGreaterThanOrEqual(box.y + box.height + 8)
-          expect(locale === 'ar' ? panel.x - box.x : panel.x + panel.width - box.x - box.width).toBeCloseTo(0, 0)
+          const end = locale === 'ar' ? box.x : box.x + box.width - panel.width
+          const start = locale === 'ar' ? box.x + box.width - panel.width : box.x
+          // In narrow RTL Trash, Empty Trash and the recorder leave room only for the flipped alignment.
+          // Base UI adds a pixel to collision padding when deciding whether to flip.
+          const fits = (x: number) => x >= 13 && x + panel.width <= width - 13
+          if (fits(end)) expect(Math.abs(panel.x - end)).toBeLessThanOrEqual(0.5)
+          else if (fits(start)) expect(Math.abs(panel.x - start)).toBeLessThanOrEqual(0.5)
+          else expect(Math.min(Math.abs(panel.x - 12), Math.abs(panel.x + panel.width - width + 12))).toBeLessThanOrEqual(1)
           await page.keyboard.press('Escape')
         }
       }
@@ -298,7 +310,7 @@ test('skipping from the popover confirms only success, opens Settings, and dismi
       await expect(toast).toContainText('AI upgrade skipped')
       await expect(toast.getByRole('button', { name: 'Settings', exact: true })).toBeVisible()
       expect(await toast.evaluate(el => {
-        const title = el.querySelector('.app-toast-title')!, action = el.querySelector('.app-toast-action')!
+        const title = el.querySelector('.app-toast-title')!, action = el.querySelector('.workspace-button')!
         return [title, action].every(line => {
           const range = document.createRange()
           range.selectNodeContents(line)
@@ -311,7 +323,8 @@ test('skipping from the popover confirms only success, opens Settings, and dismi
         await expect(page.getByTestId('settings')).toBeVisible()
         await expect.poll(() => page.evaluate(() => window.yogurt.nav.current())).toBe('/settings/notes-model')
       } else if (dismiss === 'close') {
-        await toast.locator('.app-toast-close').click()
+        await toast.hover()
+        await toast.getByRole('button', { name: 'Close', exact: true }).click()
       } else {
         await page.mouse.move(0, 0)
       }

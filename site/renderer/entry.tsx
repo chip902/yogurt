@@ -11,7 +11,7 @@ import './frame.css'
 import { meeting, folders, ready, onReset } from './bridge.mjs'
 const noop = () => {}
 document.documentElement.classList.add('main-window')
-document.documentElement.dataset.marketingTheme = fragment ? 'light' : 'dark'
+document.documentElement.dataset.marketingTheme = fragment ? (new URLSearchParams(location.search).get('theme') === 'dark' ? 'dark' : 'light') : 'dark'
 if (fragment) document.documentElement.dataset.fragment = fragment
 function Scene() {
   const [revision, setRevision] = useState(0)

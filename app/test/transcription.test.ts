@@ -1,8 +1,9 @@
+import { AUDIO_SPEAKER } from '../src/shared/audioUpload'
 import { EventEmitter } from 'node:events'
 import { PassThrough } from 'node:stream'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Capture, encodeFrame, hookCapture, recordingFinished, type CaptureProc } from '../src/main/capture'
-import { hookTranscription, transcribeRecorded, settleTranscription, speechLocaleFor, spokenChanged, stopTranscriptionServer, transcribing } from '../src/main/asr'
+import { Capture, encodeFrame, hookCapture, setRecordingPaused, recordingFinished, type CaptureProc } from '../src/main/capture'
+import { liveSilentMs, hookTranscription, transcribeRecorded, settleTranscription, speechLocaleFor, spokenChanged, stopTranscriptionServer, transcribing, releaseIdleSpeech } from '../src/main/asr'
 import type { Spoken } from '../src/shared/spoken'
 import type { TranscriptPartial } from '../src/shared/types'
 import { openStore, type Meeting, type Store } from '../src/main/store'
@@ -36,7 +37,7 @@ function fakeProc() {
 
 let store: Store
 beforeEach(() => { store = openStore(':memory:') })
-const meeting = (): Meeting => store.createMeeting({ title: 't', startedAt: 1, endedAt: null, eventId: null, app: null, attendees: [], state: 'recording' })
+const meeting = (source?: string): Meeting => store.createMeeting({ source, title: 't', startedAt: 1, endedAt: null, eventId: null, app: null, attendees: [], state: 'recording' })
 const says = (c: Chunk): Line[] => [{ track: c.track, startMs: c.startMs, endMs: c.startMs + 1000, text: `${c.track} said it at ${c.startMs}` }]
 
 const disposers: Array<() => void> = []
@@ -262,6 +263,29 @@ describe('whisper-server between meetings', () => {
     expect(s.made[1].urls).toBe(1)
     await h.end(b)
   })
+  it('a small Mac lets an idle whisper-server go at once, before the notes model loads next to it (a 24 GB Mac froze)', async () => {
+    const s = fakeServers()
+    const h = hooks(s.make, 60_000)
+    const a = meeting()
+    h.begin(a); await h.end(a)
+    expect(s.made[0].stops).toBe(0)
+    await releaseIdleSpeech()
+    expect(s.made[0].stops).toBe(1)
+    // the next meeting starts a new one
+    const b = meeting()
+    h.begin(b)
+    expect(s.made).toHaveLength(2)
+    await h.end(b)
+  })
+  it('never while a meeting is still being transcribed', async () => {
+    const s = fakeServers()
+    const h = hooks(s.make, 60_000)
+    const a = meeting()
+    h.begin(a)
+    await releaseIdleSpeech()
+    expect(s.made[0].stops).toBe(0)
+    await h.end(a)
+  })
   it('a meeting starting before the wait is up keeps the same server running', async () => {
     const s = fakeServers()
     const h = hooks(s.make, 60)
@@ -362,6 +386,53 @@ describe('a meeting recorded before the speech model was in (#30)', () => {
     expect(store.meeting(m.id)?.transcriptionPending).not.toBe(true)
     expect(store.untranscribedMeetings()).toEqual([])
   })
+  it('continues saved audio at the persisted timestamp without duplicating its first line', async () => {
+    rig('transcription-first')
+    const m=meeting('audio-file')
+    store.addSegments([{meetingId:m.id,track:'them',startMs:1000,endMs:2000,text:'Kept first line',speaker:AUDIO_SPEAKER}])
+    expect(await transcribeRecorded(m.id,{them:track(1,4)},undefined,{fromMs:{them:2000}})).toBe(true)
+    const lines=store.segments(m.id)
+    expect(lines[0].text).toBe('Kept first line');expect(lines).toHaveLength(2)
+    expect(lines[1].startMs).toBeGreaterThanOrEqual(4000)
+  })
+  it('stages replacement words through the actual pipeline without publishing or removing old words', async () => {
+    const r=rig('transcription-first'),m=meeting('audio-file')
+    store.addSegments([{meetingId:m.id,track:'them',startMs:0,endMs:100,text:'Original transcript',speaker:AUDIO_SPEAKER}])
+    expect(await transcribeRecorded(m.id,{them:track(1,4)},undefined,{save:lines=>store.addTranscriptionDraft(m.id,lines)})).toBe(true)
+    expect(store.segments(m.id).map(line=>line.text)).toEqual(['Original transcript'])
+    expect(r.sent).toEqual([]);expect(store.transcriptionDraft(m.id)).toHaveLength(2)
+    expect(store.meeting(m.id)?.transcriptionPending).toBe(true)
+    store.commitTranscriptionDraft(m.id)
+    expect(store.segments(m.id)).toHaveLength(2);expect(store.segments(m.id).some(line=>line.text==='Original transcript')).toBe(false)
+  })
+  it.each([undefined, 'audio-file'])('reports saved transcription progress for source %s without requiring an upload job', async source => {
+    rig('transcription-first')
+    const m = meeting(source), progress = vi.fn()
+    store.updateMeeting(m.id, { state: 'stopped', transcriptionPending: true })
+    expect(await transcribeRecorded(m.id, { them: track(1, 4) }, undefined, { progress })).toBe(true)
+    expect(store.segments(m.id).length).toBeGreaterThan(0)
+    expect(store.segments(m.id).map(line => line.speaker)).toEqual(source ? [AUDIO_SPEAKER, AUDIO_SPEAKER] : [null, null])
+    expect(progress).toHaveBeenCalled()
+    expect(store.meeting(m.id)?.transcriptionPending).not.toBe(true)
+  })
+  it('retains an interrupted uploaded transcript for restart recovery, but never calls it complete', async () => {
+    const abort = new AbortController(), progress = vi.fn()
+    rig('transcription-first', { transcriber: c => { abort.abort(); return says(c) } })
+    const m = meeting('audio-file')
+    store.updateMeeting(m.id, { state: 'stopped', transcriptionPending: true })
+    expect(await transcribeRecorded(m.id, { them: track(1, 4) }, undefined, { signal: abort.signal, progress })).toBe(false)
+    expect(progress).not.toHaveBeenCalled()
+    expect(store.meeting(m.id)?.transcriptionPending).toBe(true)
+    store.addSegments([{ meetingId: m.id, track: 'them', startMs: 0, endMs: 1000, text: 'A partial line', speaker: AUDIO_SPEAKER }])
+    expect(store.untranscribedMeetings().map(m => m.id)).toContain(m.id)
+  })
+  it('does not report successful deferred transcription when the model fails', async () => {
+    rig('transcription-first', { transcriber: () => { throw new Error('speech model failed') } })
+    const m = meeting()
+    store.updateMeeting(m.id, { state: 'stopped', transcriptionPending: true })
+    expect(await transcribeRecorded(m.id, { them: track(1) })).toBe(false)
+    expect(store.meeting(m.id)?.transcriptionPending).toBe(true)
+  })
   it('a meeting with some transcript is never transcribed again (no lines twice)', async () => {
     const r = rig('transcription-first', { transcriber: async () => { throw new Error('whisper fell over') } })
     const m = meeting()
@@ -378,5 +449,54 @@ describe('a meeting recorded before the speech model was in (#30)', () => {
     store.updateMeeting(m.id, { state: 'stopped', transcriptionPending: true })
     expect(await transcribeRecorded(m.id, { them: track(1) })).toBe(false)
     expect(store.meeting(m.id)?.transcriptionPending).toBe(true)
+  })
+})
+
+
+describe('live silence for call detection', () => {
+  it('requires fresh input on both tracks and resets for either voice, pause, gaps and live words', async () => {
+    let now = 10_000, ms = 0
+    const time = vi.spyOn(Date, 'now').mockImplementation(() => now)
+    const r = rig('transcription-first', { transcriber: () => [] }), m = meeting()
+    r.begin(m)
+    const output = r.procs[0].proc.stdout as PassThrough
+    const frame = (voice?: 'me' | 'them', tracks = ['me', 'them'] as const) => {
+      now += 100; ms += 100
+      for (const track of tracks) output.write(encodeFrame({ t: 'pcm', track, ms, samples: voice === track ? tone(0.1) : new Float32Array(1600) }))
+    }
+    const quiet = (n: number) => { for (let i = 0; i < n; i++) frame() }
+    try {
+      expect(liveSilentMs(m.id)).toBe(0)
+      quiet(601)
+      expect(liveSilentMs(m.id)).toBe(60_000)
+      frame('me'); expect(liveSilentMs(m.id)).toBe(0)
+      quiet(620); expect(liveSilentMs(m.id)).toBeGreaterThanOrEqual(60_000)
+      frame('them'); expect(liveSilentMs(m.id)).toBe(0)
+      quiet(620)
+      expect(setRecordingPaused(m.id, true)).toBe(true)
+      quiet(620); expect(liveSilentMs(m.id)).toBe(0)
+      expect(setRecordingPaused(m.id, false)).toBe(true)
+      frame(); expect(liveSilentMs(m.id)).toBeLessThan(1000)
+      quiet(610); expect(liveSilentMs(m.id)).toBeGreaterThanOrEqual(60_000)
+      now += 3001; expect(liveSilentMs(m.id)).toBe(0)
+      frame(); expect(liveSilentMs(m.id)).toBe(0)
+      quiet(610)
+      output.write(encodeFrame({ t: 'speech', track: 'me', final: false, text: 'Still talking', startMs: ms, endMs: ms + 100 }))
+      expect(liveSilentMs(m.id)).toBe(0)
+      quiet(610)
+      // One missing track is unknown input, not a quiet conversation.
+      for (let i = 0; i < 31; i++) { now += 100; ms += 100; output.write(encodeFrame({ t: 'pcm', track: 'me', ms, samples: new Float32Array(1600) })) }
+      expect(liveSilentMs(m.id)).toBe(0)
+      frame(); expect(liveSilentMs(m.id)).toBe(0)
+    } finally { time.mockRestore(); await r.stop(m) }
+    expect(liveSilentMs(m.id)).toBe(0)
+  })
+  it('cannot claim silence without a speech pipeline, before capture, or for an unknown meeting', async () => {
+    const r = rig('transcription-first', { modelPath: () => undefined }), m = meeting()
+    expect(liveSilentMs(m.id)).toBe(0)
+    r.begin(m)
+    r.procs[0].say('me', 0)
+    expect(liveSilentMs(m.id, Date.now() + 60_000)).toBe(0)
+    await r.stop(m)
   })
 })

@@ -1,4 +1,3 @@
-import { matchesEvent } from './calendar'
 import type { Meeting } from './store'
 import { callAppName, callGone, decide, ended, type Prompt, type Signals } from './detect'
 import type { Reading } from './detectSignals'
@@ -11,6 +10,8 @@ export type WatchDeps = {
   bindApp(id: string, app: string): Meeting | undefined
   /** offer to take notes */
   offer(p: Prompt): void
+  /** the first run is set up (onboarding done): until then no call is offered, the mic and models may not be ready */
+  ready?(): boolean
   /** ask whether to stop */
   askStop(m: Meeting): void
   /** take down whichever card is up */
@@ -32,7 +33,7 @@ export class Watcher {
   readonly dismissed = new Set<string>()
   private shown: string | null = null // key of the start card, or 'stop'
   private busy = false
-  private rec: { id: string; lastMic: number; snoozeUntil: number; /** the call app was on the mic during this recording */ seen: boolean; stopped: boolean } | null = null
+  private rec: { id: string; lastMic: number; snoozeUntil: number; /** the call app was on the mic during this recording */ seen: boolean; stopped: boolean; /** started without a call app (New note, the agenda): never stopped by itself */ byHand: boolean } | null = null
 
   /** call apps on the mic at the last look before recording: a recording started from the card belongs to that call */
   private idleMic = new Set<string>()
@@ -46,6 +47,8 @@ export class Watcher {
   dismiss(key: string) { this.dismissed.add(key); this.shown = null }
   /** "Keep going": ask again in a while, not every tick */
   keepGoing() { if (this.rec) this.rec.snoozeUntil = this.d.now() + SNOOZE; this.shown = null }
+  /** Close: no more stop questions during this recording. */
+  dismissStop() { if (this.rec) this.rec.snoozeUntil = Infinity; this.shown = null }
   /** the card went away by an action, or a recording started or stopped (a resumed note is watched afresh) */
   cleared() { this.shown = null; this.rec = null }
 
@@ -78,7 +81,7 @@ export class Watcher {
     for (const k of [...this.dismissed]) {
       if (k.startsWith('app:') && !s.micApps.some((m) => callAppName(k.slice(4)) === callAppName(m.bundleId, s.runningApps))) this.dismissed.delete(k)
     }
-    const p = decide(s, now, this.dismissed)
+    const p = this.d.ready && !this.d.ready() ? null : decide(s, now, this.dismissed)
     if (!p) { if (this.shown) { this.shown = null; this.d.hide() } return }
     if (this.shown === p.key) return
     this.shown = p.key
@@ -88,6 +91,8 @@ export class Watcher {
 
   private recording(m: Meeting, s: Signals, now: number) {
     const starting = this.rec?.id !== m.id
+    // started by hand (no call app yet: New note, the agenda): never stopped by itself, only asked about
+    const byHand = starting ? !m.app : this.rec!.byHand
     const recent = starting && this.idleCall && now - this.idleCall.at <= 6000 ? this.idleCall.app : null
     const observed = decide({ ...s, recording: false }, now, new Set())?.app ?? null
     if (!m.app && (observed || recent)) {
@@ -95,7 +100,7 @@ export class Watcher {
       if (m.app) console.info(`CALL bind meeting=${m.id} app=${m.app} via=${observed ? 'mic' : 'recent-mic'}`)
     } else if (starting) console.info(`CALL watch meeting=${m.id} app=${m.app ?? 'none'}`)
     if (starting) {
-      this.rec = { id: m.id, lastMic: now, snoozeUntil: 0, seen: !!m.app && this.idleMic.has(m.app), stopped: false }
+      this.rec = { id: m.id, lastMic: now, snoozeUntil: 0, seen: !!m.app && this.idleMic.has(m.app), stopped: false, byHand }
       this.idleCall = null; this.idleMic.clear()
       if (this.shown !== 'stop') this.shown = null
     }
@@ -103,20 +108,20 @@ export class Watcher {
     if (r.stopped) return
     const onMic = !!m.app && s.micApps.some((a) => { const n = callAppName(a.bundleId, s.runningApps); return n && n === m.app })
     if (onMic) r.seen = true
-    // a meeting with no known app has no mic to watch: only the event and silence can end it
+    // Without a bound call app there is no mic-loss evidence to ask about.
     const using = !m.app || onMic
     if (using) r.lastMic = now
-    if (this.d.autoStop && this.d.autoStopOn?.() && callGone({ app: m.app, seen: r.seen, micIdleMs: now - r.lastMic, graceMs: this.d.graceMs })) {
-      console.info(`CALL gone meeting=${m.id} app=${m.app} idle_ms=${now - r.lastMic}`)
+    const silentMs = this.d.silentMs?.() ?? 0
+    if (!r.byHand && this.d.autoStop && this.d.autoStopOn?.() && callGone({ app: m.app, seen: r.seen, micIdleMs: now - r.lastMic, silentMs, graceMs: this.d.graceMs })) {
+      console.info(`CALL gone meeting=${m.id} app=${m.app} idle_ms=${now - r.lastMic} silent_ms=${silentMs}`)
       r.stopped = true
       if (this.shown === 'stop') { this.shown = null; this.d.hide() }
       this.d.autoStop(m)
       return
     }
-    const event = s.events.find((e) => matchesEvent(e, m.eventId)) ?? null
-    const over = ended(s, now - r.lastMic, { event, silentMs: this.d.silentMs?.() ?? 0, now })
+    const over = ended(now - r.lastMic, silentMs)
     if (over && this.shown !== 'stop' && now >= r.snoozeUntil) {
-      console.info(`CALL stop-card meeting=${m.id} app=${m.app ?? 'none'} reason=${now - r.lastMic >= 30_000 ? 'mic-idle' : 'event-ended-and-silent'} idle_ms=${now - r.lastMic}`)
+      console.info(`CALL stop-card meeting=${m.id} app=${m.app ?? 'none'} reason=mic-idle-and-silent idle_ms=${now - r.lastMic} silent_ms=${silentMs}`)
       this.shown = 'stop'; this.d.askStop(m)
     }
     else if (!over && this.shown === 'stop') { this.shown = null; this.d.hide() }

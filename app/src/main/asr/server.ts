@@ -88,6 +88,11 @@ type Opts = {
   gpuFallback?: boolean
   /** told once when that happens (the speed check measured with the graphics, so it times again on the next start) */
   onGpuOff?: () => void
+  /**
+   * With gpuFallback: does a launch on the graphics card hear words in a known clip? Some cards (#92 an Adreno, #76 a
+   * Radeon RX 9070 XT) load whisper and answer every request with nothing; then it runs on the processor instead.
+   */
+  checkGpu?: (url: string) => Promise<boolean>
 }
 
 /** a meeting relaunches a dead or hung server at most this often, waiting longer each time */
@@ -112,6 +117,10 @@ export function createWhisperServer(o: Opts) {
   let died = false
   /** a launch died before it answered, with gpuFallback: the graphics stay off from now on */
   let cpuOnly = false
+  /** hangs on the graphics card (gpuFallback): the second one turns them off (#76) */
+  let gpuHangs = 0
+  /** a hang on the graphics card twice (#76: a GTX 1050 Ti under Vulkan never answered) turns them off for good */
+  const GPU_HANGS = 2
 
   const launch = async (): Promise<string> => {
     if (o.pidFile) { mkdirSync(dirname(o.pidFile), { recursive: true }); killStale(o.pidFile, o.lookup) }
@@ -121,6 +130,8 @@ export function createWhisperServer(o: Opts) {
     const args = ['-m', o.model, '--host', '127.0.0.1', '--port', String(port), '-t', String(o.threads ?? Math.min(4, availableParallelism())), '-bs', '5']
     if (o.vadModel) args.push('--vad', '-vm', o.vadModel)
     if (cpuOnly) args.push('-ng')
+    // which model goes in the log too: a report of poor transcripts needs to know if a smaller model was picked (#107)
+    console.info('ASR', `whisper-server starts with ${basename(o.model)} on ${cpuOnly ? 'the processor' : 'the graphics card if it can'}`)
     const p = spawn(o.binary, args, { stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true })
     launches++
     child = p
@@ -153,12 +164,26 @@ export function createWhisperServer(o: Opts) {
       }
       throw new Error('whisper-server did not start in time')
     })()
-    try { return await Promise.race([healthy, gone]) } catch (e) {
+    let up: string
+    try { up = await Promise.race([healthy, gone]) } catch (e) {
       healthy.catch(() => {})
       if (o.gpuFallback && !cpuOnly && (p.exitCode !== null || p.signalCode !== null)) { cpuOnly = true; console.error('whisper-server stopped while loading; starting it again without the graphics card'); o.onGpuOff?.() }
       p.kill('SIGKILL')
       throw e
     }
+    if (o.gpuFallback && !cpuOnly && o.checkGpu) {
+      let hears = true
+      try { hears = await o.checkGpu(up) } catch (e) { console.warn('whisper-server: checking the graphics card failed', e) }
+      if (!hears) {
+        cpuOnly = true
+        console.error('whisper-server heard no words on the graphics card; starting it again without it')
+        o.onGpuOff?.()
+        if (child === p) { child = null; died = false }
+        p.kill('SIGKILL')
+        return launch()
+      }
+    }
+    return up
   }
 
   const self = {
@@ -190,13 +215,20 @@ export function createWhisperServer(o: Opts) {
     resetBudget() { used = 0 },
     /**
      * It hangs or died: kill it and start another (the same relaunch as after a crash). `used` is the address the failed
-     * request went to; if a newer launch exists or is starting, another request already did this, so just wait for that one.
+     * request went to (`at`); if a newer launch exists or is starting, another request already did this, so just wait for that one.
      */
-    async wedged(used?: string): Promise<string> {
-      if (used === undefined || starting || launchUrl !== used) return self.url()
+    async wedged(at?: string): Promise<string> {
+      if (at === undefined || starting || launchUrl !== at) return self.url()
       const p = child
       if (p) { child = null; address = null; p.kill('SIGKILL') }
       died = true
+      if (o.gpuFallback && !cpuOnly && ++gpuHangs >= GPU_HANGS) {
+        cpuOnly = true
+        // a new way of running: the meeting's relaunches start over for it
+        used = 0
+        console.error('whisper-server hung twice on the graphics card; starting it again without it')
+        o.onGpuOff?.()
+      }
       return self.url()
     },
     /** does the server at this address (default: the current one) answer? */

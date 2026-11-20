@@ -1,10 +1,8 @@
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { homePage } from '../scripts/site-page.mjs'
+import { siteResponse } from './site-response'
 
 export const dynamic = 'force-static'
 
 export function GET() {
-  return new Response(readFileSync(join(process.cwd(), 'content/home.html'), 'utf8'), {
-    headers: { 'Content-Type': 'text/html; charset=utf-8' },
-  })
+  return siteResponse(homePage())
 }

@@ -1,3 +1,4 @@
+import type { AudioUploadFile, AudioUploadStatus } from './audioUpload'
 import type { RendererError } from './rendererError'
 import type { WidgetLayout, WidgetSurface } from './widgetMorph'
 import type { ContextChip, ContextTarget } from './askContext'
@@ -5,6 +6,8 @@ import type { FolderAppearance } from './folderAppearance'
 import type { LiveWord } from './liveWords'
 import type { Meeting, MeetingCard as StoredMeetingCard, Person, Segment, SnippetPart, Folder } from '../main/store'
 import type { CalEvent, CalendarSource, CalendarStatus } from '../main/calendar'
+/** a connected calendar link, as the window sees it: never its address */
+export type CalendarLinkInfo = { id: string; name: string; host: string }
 import type { Access, PermissionKind, PermissionStatus } from '../main/permissions'
 import type { Capabilities } from './platform'
 export type { Access, PermissionKind, PermissionStatus }
@@ -109,6 +112,11 @@ export type YogurtApi = {
   }
   /** the words heard in a meeting, live */
   transcript: {
+    draft(meetingId:string):Promise<Segment[]>
+    onDraft(cb:(meetingId:string)=>void):()=>void
+    onReplaced(cb:(meetingId:string)=>void):()=>void
+    run(meetingId:string,again:boolean):Promise<boolean>
+    stop(meetingId:string):Promise<void>
     /** the meeting's lines; hidden: the echo lines hidden after the meeting too (each marked hidden); last: only the latest lines */
     get(meetingId: string, o?: { hidden?: boolean; last?: number }): Promise<Segment[]>
     /** brings hidden lines back: the ones given, or all of the meeting's */
@@ -139,8 +147,9 @@ export type YogurtApi = {
     /** status, the draft as it is written, and the saved notes; returns the way to stop listening */
     onChange(cb: (v: NoteView) => void): () => void
   }
-  /** copying and exporting a meeting's notes or transcript; `side` is the notes shown (the person's own or the enhanced ones) */
   share: {
+    /** opens the Mac share menu for the public Yogurt website, anchored in renderer CSS pixels */
+    appLink(x: number, y: number): Promise<boolean>
     /** puts the notes or the transcript on the clipboard as text and HTML; nothing: there was nothing to copy */
     copy(meetingId: string, what: 'notes' | 'transcript', side: 'mine' | 'enhanced'): Promise<'copied' | 'nothing' | 'failed'>
     /** asks where to save a Markdown file, then writes it */
@@ -160,7 +169,7 @@ export type YogurtApi = {
     check(): Promise<void>
     /** quits, installs the downloaded version and reopens; false while recording or with nothing downloaded */
     restart(): Promise<boolean>
-    /** the corner's offer was closed: it comes back tomorrow */
+    /** hides this version in the title bar until the app restarts; installation is unchanged */
     later(): Promise<void>
     onStatus(fn: (s: UpdateStatus) => void): () => void
   }
@@ -175,6 +184,13 @@ export type YogurtApi = {
     show(): void
   }
   /** a meeting's recording, played at yogurt-audio://<meetingId>/<track> */
+  audioUpload: {
+    pick(): Promise<AudioUploadFile | null>
+    inspect(token: string): Promise<number>
+    start(token: string, title: string, at: number): Promise<void>
+    cancel(token: string): Promise<void>
+    onStatus(cb: (token: string, status: AudioUploadStatus) => void): () => void
+  }
   audio: {
     delete(id: string): Promise<DeleteRecordingResult>
     onDeleted(cb: (id: string) => void): () => void
@@ -220,7 +236,8 @@ export type YogurtApi = {
   }
   /** the Mac's calendar: what is still to come today and tomorrow */
   calendar: {
-    list(): Promise<{ status: CalendarStatus; calendars: (CalendarSource & { enabled: boolean })[]; hideEventsWithoutCallLink: boolean }>
+    /** status: any calendar at all; systemStatus: the Mac's own calendars, apart from calendar links. link: a calendar link (removable) */
+    list(): Promise<{ status: CalendarStatus; systemStatus?: CalendarStatus; calendars: (CalendarSource & { enabled: boolean; link?: boolean })[]; hideEventsWithoutCallLink: boolean }>
     setEnabled(id: string, enabled: boolean): Promise<boolean>
     setHideWithoutLink(hide: boolean): Promise<boolean>
     onChange(cb: () => void): () => void
@@ -228,7 +245,12 @@ export type YogurtApi = {
     /** not asked yet: asks; turned off: opens the Mac's settings */
     connect(): Promise<CalendarStatus>
     /** the events on the day of this time, earliest first (none without Calendar access) */
-    day(at: number): Promise<{ status: CalendarStatus; events: AgendaEvent[] }>
+    day(at: number, purpose?: 'link-event'): Promise<{ status: CalendarStatus; events: AgendaEvent[]; unavailable?: string[] }>
+    /** Windows and Linux: the calendar links connected (never their addresses) */
+    links(): Promise<CalendarLinkInfo[]>
+    /** connect a private calendar address; why not when it can't be */
+    addLink(url: string): Promise<{ ok: true; id: string; name: string } | { ok: false; error: 'bad-url' | 'unreachable' | 'not-calendar' | 'public-address' }>
+    removeLink(id: string): Promise<boolean>
   }
   /** what Yogurt may use: read it, ask for it (the Mac's own prompt), or open its pane of System Settings */
   permissions: {
@@ -345,7 +367,7 @@ export type SetupState = {
 export type { Meeting, Person, Segment, SnippetPart, Folder } from '../main/store'
 export type { CalEvent, CalendarSource, CalendarStatus } from '../main/calendar'
 /** Calendar occurrence with its saved note, if one exists. No inferred or sample meetings. */
-export type AgendaEvent = CalEvent & { note?: { id: string; state: Meeting['state'] } }
+export type AgendaEvent = CalEvent & { note?: { id: string; state: Meeting['state']; source?: string } }
 /** Start notes: the meeting's id, or why it didn't start (gone: the event left the calendar) */
 export type StartResult = { id: string; alreadyRecording?: true; resumeRequested?: true } | { error: 'gone' | 'failed' }
 /** one meeting found: parts is a piece of its notes or transcript, hit on the words matched */
@@ -440,6 +462,4 @@ export type ConversationSummary = { id: string; title: string; updatedAt: number
 /** enabled: in Settings. clients: apps connected now. command: the program to give an AI app */
 export type McpStatus = { enabled: boolean; clients: string[]; command: string }
 /** Settings → Updates. available: this build updates itself (not in development or a preview); next: the version found */
-export type UpdateStatus = { version: string; available: boolean; on: boolean; state: 'idle' | 'checking' | 'latest' | 'downloading' | 'ready' | 'error'; next?: string
-  /** the corner should offer Restart Yogurt for the version that downloaded (offersRestart) */
-  offer?: boolean }
+export type UpdateStatus = { version: string; available: boolean; on: boolean; state: 'idle' | 'checking' | 'latest' | 'downloading' | 'ready' | 'error'; next?: string; dismissed?: boolean }

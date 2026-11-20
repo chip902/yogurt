@@ -1,3 +1,4 @@
+import { AudioUploadHost } from './AudioUpload'
 import { toasts } from './TrashToast'
 import { askDestination } from '../../../shared/askContext'
 import * as Sidebar from '@animate-ui/react/primitives/sidebar'
@@ -13,6 +14,7 @@ import { FileText, MessageCircle, Search, Settings, SidebarToggle } from './Icon
 import { FoldersNav } from './FoldersNav'
 import { FinishSetup } from './FinishSetup'
 import { NotesSetup } from './NotesSetup'
+import { UpdateReady } from './UpdateReady'
 
 export function Workspace({ route, meeting, folders, go, back, forward, search, collapsed, sidebarMotion, toggleSidebar, children }: {
   meeting?: Pick<MeetingView, 'id' | 'title'>
@@ -70,7 +72,7 @@ export function Workspace({ route, meeting, folders, go, back, forward, search, 
   return <div className={`workspace ${collapsed ? 'sidebar-collapsed' : ''}`} data-testid="workspace" data-sidebar-motion={sidebarMotion}>
     <div className="workspace-window-bar">
       <div className="workspace-drag-region drag" data-testid="titlebar" aria-hidden="true" />
-      <button className="workspace-icon workspace-sidebar-toggle no-drag" data-testid={collapsed ? 'sidebar-expand' : 'sidebar-collapse'}
+      <button className="ghost-btn workspace-icon workspace-sidebar-toggle no-drag" data-testid={collapsed ? 'sidebar-expand' : 'sidebar-collapse'}
         onClick={(e) => toggleSidebar(e.detail > 0)}
         aria-expanded={!collapsed} aria-controls="workspace-sidebar" aria-keyshortcuts={onMac() ? 'Control+Meta+S' : 'Control+Shift+S'} title={`${collapsed ? t('Expand sidebar') : t('Collapse sidebar')} (${keys('⌃⌘S')})`}
         aria-label={collapsed ? t('Expand sidebar') : t('Collapse sidebar')}>
@@ -99,20 +101,22 @@ export function Workspace({ route, meeting, folders, go, back, forward, search, 
       <header className="workspace-toolbar" data-note={note} data-recording-return={returnToRecording}>
         <div className="workspace-breadcrumb drag">
           <span className="workspace-history">
-            <button data-testid="nav-back" className="workspace-icon no-drag" disabled={!back && !note} onClick={back ?? (() => go(''))} aria-label={t('Back')} title={`${t('Back')} (${keys('⌘[')})`}><ChevronLeft size={14} strokeWidth={1.75} className="rtl:-scale-x-100" aria-hidden="true" /></button>
-            <button data-testid="nav-forward" className="workspace-icon no-drag" disabled={!forward} onClick={forward} aria-label={t('Forward')} title={`${t('Forward')} (${keys('⌘]')})`}><ChevronRight size={14} strokeWidth={1.75} className="rtl:-scale-x-100" aria-hidden="true" /></button>
+            <button data-testid="nav-back" className="ghost-btn workspace-icon no-drag" disabled={!back && !note} onClick={back ?? (() => go(''))} aria-label={t('Back')} title={`${t('Back')} (${keys('⌘[')})`}><ChevronLeft size={14} strokeWidth={1.75} className="rtl:-scale-x-100" aria-hidden="true" /></button>
+            <button data-testid="nav-forward" className="ghost-btn workspace-icon no-drag" disabled={!forward} onClick={forward} aria-label={t('Forward')} title={`${t('Forward')} (${keys('⌘]')})`}><ChevronRight size={14} strokeWidth={1.75} className="rtl:-scale-x-100" aria-hidden="true" /></button>
           </span>
           <span data-testid="workspace-heading" aria-current="page" title={label}>{label}</span>
         </div>
+      <UpdateReady recording={recording?.kind === 'recording'} />
+      <NotesSetup go={go} />
       {returnToRecording && <button className="workspace-recording-link no-drag" data-testid="recording-return" data-paused={recording.paused}
         aria-label={t('Open {title}', { title: recording.title })} title={t('Open {title}', { title: recording.title })} onClick={() => go(`/note/${recording.meetingId}`)}>
         <LevelBars testId="recording-return-wave" height={16} paused={recording.paused} />
         <RecordingTime view={recording} testId="recording-return-time" className="recording-return-time" />
       </button>}
-      <NotesSetup go={go} />
       <div id="workspace-actions" className="workspace-toolbar-actions" />
       </header>
       {children}
+      <AudioUploadHost />
 
     </div>
   </div>

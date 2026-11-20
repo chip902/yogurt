@@ -1,3 +1,4 @@
+import { audioUpload } from './audioUpload'
 import type { WidgetLayout } from '../shared/widgetMorph'
 import { contextBridge, ipcRenderer } from 'electron'
 import { capabilities, platformOf } from '../shared/platform'
@@ -87,6 +88,11 @@ const api: YogurtApi = {
     },
   },
   transcript: {
+    draft:id=>ipcRenderer.invoke('transcript:draft',id),
+    onDraft:cb=>{const listener=(_e:unknown,id:string)=>cb(id);ipcRenderer.on('transcript:draft',listener);return()=>ipcRenderer.removeListener('transcript:draft',listener)},
+    onReplaced: cb => {const listener=(_e:unknown,id:string)=>cb(id);ipcRenderer.on('transcript:replaced',listener);return()=>ipcRenderer.removeListener('transcript:replaced',listener)},
+    run: (id,again) => ipcRenderer.invoke('transcript:run',id,again),
+    stop: id => ipcRenderer.invoke('transcript:stop',id),
     get: (id, o) => ipcRenderer.invoke('transcript:get', id, o),
     restore: (id, ids) => ipcRenderer.invoke('transcript:restore', id, ids),
     onSegment: (cb) => {
@@ -128,9 +134,11 @@ const api: YogurtApi = {
     },
   },
   share: {
+    appLink: (x, y) => ipcRenderer.invoke('share:app-link', x, y),
     copy: (id, what, side) => ipcRenderer.invoke('share:copy', id, what, side),
     save: (id, side) => ipcRenderer.invoke('share:save', id, side),
   },
+  audioUpload,
   audio: {
     delete: (id) => ipcRenderer.invoke('audio:delete', id),
     onDeleted: (cb) => {
@@ -189,7 +197,10 @@ const api: YogurtApi = {
     onChange: (cb) => { ipcRenderer.on('calendar:changed', cb); return () => { ipcRenderer.off('calendar:changed', cb) } },
     comingUp: () => ipcRenderer.invoke('calendar:coming-up'),
     connect: () => ipcRenderer.invoke('calendar:connect'),
-    day: (at) => ipcRenderer.invoke('calendar:day', at),
+    day: (at, purpose) => ipcRenderer.invoke('calendar:day', at, purpose),
+    links: () => ipcRenderer.invoke('calendar:links'),
+    addLink: (url) => ipcRenderer.invoke('calendar:add-link', url),
+    removeLink: (id) => ipcRenderer.invoke('calendar:remove-link', id),
   },
   permissions: {
     status: () => ipcRenderer.invoke('permissions:status'),
