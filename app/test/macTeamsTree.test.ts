@@ -25,4 +25,20 @@ describe('call-watch on the Teams desktop app (#111)', () => {
   it('says in the log why no window was a call', () => {
     expect(swift).toContain('"no-call-window (\\(lastControlLook))"')
   })
+  it("asks Chrome for the Meet page the way screen readers do, and turns that off when the watch ends", () => {
+    const ask = swift.slice(swift.indexOf('func askTree'), swift.indexOf('func resetTrees'))
+    expect(ask).toContain('"AXEnhancedUserInterface" as CFString, kCFBooleanTrue')
+    expect(swift).toMatch(/readDataToEndOfFile\(\); DispatchQueue\.main\.sync \{ resetTrees\(\) \}; exit\(0\)/)
+  })
+  it("reads a Meet tab in a browser whose window title is only the browser's name, and asks the window itself for the page (#123)", () => {
+    expect(swift).toMatch(/"com\.ardia\.browser", "company\.thebrowser\.dia", "com\.microsoft\.edgemac", "com\.brave\.Browser", "com\.apple\.Safari"\]\.contains\(id\)/)
+    const windows = swift.slice(swift.indexOf('func callWindows'), swift.indexOf('func watchCalls'))
+    expect(windows).toContain('browserTitle(id)')
+    expect(windows).toContain('kAXFocusedWindowAttribute')
+    expect(windows).toContain('([w as! AXUIElement], title)')
+    expect(swift.slice(swift.indexOf('func watchCalls'))).toContain('CFEqual(w, focused)')
+    expect(swift).not.toContain('meetTabTitle')
+    expect(swift).toMatch(/for w in wins\.prefix\(4\) \{ AXUIElementSetAttributeValue\(w, "AXManualAccessibility"/)
+  })
 })
+

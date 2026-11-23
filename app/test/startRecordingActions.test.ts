@@ -36,9 +36,9 @@ let meetingsChanged: () => void
 let widgetChanged: (view: WidgetView | null) => void
 let cleanups: (() => void)[]
 const flush = async () => { await Promise.resolve(); await Promise.resolve() }
-const render = () => {
+const render = (emptyActions?: HTMLElement) => {
   hooks.state = 0; hooks.ref = 0; hooks.effects = []; hooks.layout = []
-  return StartRecording({ onStarted: started, onGone: gone }) as ReactElement<Record<string, unknown>> | null
+  return StartRecording({ onStarted: started, onGone: gone, emptyActions }) as ReactElement<Record<string, unknown>> | null
 }
 const run = (effect: () => (() => void) | void) => { const cleanup = effect(); if (cleanup) cleanups.push(cleanup) }
 type Element = ReactElement<Record<string, unknown>>
@@ -79,6 +79,15 @@ it('keeps upload and the unattached action available outside the live/15-minute 
     expect(start).toHaveBeenLastCalledWith(null)
   }
 })
+it('starts an unattached recording from the empty library even during a calendar event', async () => {
+  await calendar([event('live')])
+  const tree = render(document.getElementById('empty')!)
+  const cta = find(tree, 'empty-start-recording')
+  expect(renderToStaticMarkup(cta.props.children as ReactNode)).toContain('Start recording')
+  await click(cta)
+  expect(start).toHaveBeenCalledExactlyOnceWith(null)
+})
+
 it('attaches the one live meeting and preserves its full title while CSS truncates the label', async () => {
   const live = { ...event('live'), title: 'Planning the next release and reviewing every open question '.repeat(4) }
   const tree = await calendar([event('soon', now + 8 * 60_000), live])
@@ -126,7 +135,7 @@ it.each(['stopped', 'done'] as const)('labels a %s note for resume in the title 
   const html = renderToStaticMarkup(row.props.children as ReactNode)
   expect(html).toContain('Resume notes · Planning live')
   // resume keeps the mic: a counterclockwise arrow reads as undo
-  expect(html).not.toContain('lucide-rotate-ccw')
+  expect(html).not.toContain('data-icon="RotateCcw"')
   expect(html).toContain('<svg')
   expect(html).toContain('Now')
   start.mockResolvedValue({ id: 'existing', resumeRequested: true })
@@ -141,7 +150,7 @@ it('keeps the take-notes label and start path for a prepared note', async () => 
   expect(label(tree)).toContain('Take notes · Planning prepared')
   const html = renderToStaticMarkup(find(tree, 'recording-meeting').props.children as ReactNode)
   expect(html).not.toContain('Resume notes')
-  expect(html).not.toContain('lucide-rotate-ccw')
+  expect(html).not.toContain('data-icon="RotateCcw"')
   expect(html).toContain('<svg')
   await click(find(tree, 'start-recording'))
   expect(start).toHaveBeenCalledExactlyOnceWith('prepared')

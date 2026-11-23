@@ -1,3 +1,4 @@
+import type { MeterPacket } from '../shared/speechWave'
 import { audioUpload } from './audioUpload'
 import type { WidgetLayout } from '../shared/widgetMorph'
 import { contextBridge, ipcRenderer } from 'electron'
@@ -34,7 +35,7 @@ const api: YogurtApi = {
       return () => { ipcRenderer.removeListener('widget:state', on) }
     },
     onLevel: (cb) => {
-      const on = (_e: unknown, lv: { me: number; them: number }) => cb(lv)
+      const on = (_e: unknown, lv: MeterPacket) => cb(lv)
       ipcRenderer.on('widget:level', on)
       return () => { ipcRenderer.removeListener('widget:level', on) }
     },
@@ -167,6 +168,12 @@ const api: YogurtApi = {
     },
   },
   conversations: {
+    waitsForMeeting: () => ipcRenderer.invoke('conversations:waits-for-meeting'),
+    onRecordingWait: cb => {
+      const on = (_e: unknown, waiting: boolean) => cb(waiting)
+      ipcRenderer.on('conversations:recording-wait', on)
+      return () => { ipcRenderer.removeListener('conversations:recording-wait', on) }
+    },
     current: (chips, fresh) => ipcRenderer.invoke('conversations:current', chips, fresh),
     context: (id, chips) => ipcRenderer.invoke('conversations:context', id, chips),
     removeContext: (id, chip) => ipcRenderer.invoke('conversations:remove-context', id, chip),
@@ -219,6 +226,7 @@ const api: YogurtApi = {
   mcp: {
     status: () => ipcRenderer.invoke('mcp:status'),
     set: (on) => ipcRenderer.invoke('mcp:set', on),
+    setChanges: (on) => ipcRenderer.invoke('mcp:set-changes', on),
     onClients: (fn) => { const f = (_e: unknown, c: string[]) => fn(c); ipcRenderer.on('mcp:clients', f); return () => { ipcRenderer.off('mcp:clients', f) } },
   },
   updates: {
@@ -239,10 +247,13 @@ const api: YogurtApi = {
     get: () => ipcRenderer.invoke('settings:get'),
     setTheme: (v) => ipcRenderer.invoke('settings:theme', v),
     setShowInMenuBar: (on) => ipcRenderer.invoke('settings:menu-bar', on),
+    setShowNextMeeting: (on) => ipcRenderer.invoke('settings:next-meeting', on),
+    setShowRecordingPill: (on) => ipcRenderer.invoke('settings:recording-pill', on),
     setAppVisibility: (choice) => ipcRenderer.invoke('settings:visibility', choice),
     setOpenAtLogin: (on) => ipcRenderer.invoke('settings:login', on),
     setName: (name) => ipcRenderer.invoke('settings:name', name),
     setStopWhenCallEnds: (on) => ipcRenderer.invoke('settings:auto-stop', on),
+    setIncludeRecordingCredit: (on) => ipcRenderer.invoke('settings:recording-credit', on),
     setRecordingReminder: (on) => ipcRenderer.invoke('settings:recording-reminder', on),
     setKeepRecordings: (on) => ipcRenderer.invoke('settings:keep-recordings', on),
     setJargon: (terms) => ipcRenderer.invoke('settings:jargon', terms),

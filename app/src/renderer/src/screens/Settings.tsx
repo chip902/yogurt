@@ -2,7 +2,7 @@ import { AboutYogurt } from '../components/AboutYogurt'
 import { retryToast, toasts } from '../components/TrashToast'
 import { LoadingContent } from '../components/LoadingContent'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Check, ChevronDown, Copy, Download, ExternalLink, Globe, Lock, Upload, FileText } from 'lucide-react'
+import { Check, ChevronDown, Copy, Download, ExternalLink, Globe, Lock, Upload, FileText } from '../components/Icons'
 import type { Access, AppVisibility, McpStatus, PermissionKind, PermissionStatus, SetupState, Theme, UpdateStatus } from '../../../shared/types'
 import { notesDownloadText, notesUpgradeSize } from '../notesSetup'
 import { permissionCopy } from '../permissionCopy'
@@ -17,6 +17,23 @@ import { appShortcuts } from '../components/Shortcuts'
 import { CalendarSettings } from '../components/CalendarSettings'
 import { supportedKinds, settingsPage } from '../../../shared/platform'
 import { Swap, SwapText } from '../components/Swap'
+
+export function NextMeetingSetting({ visible, on, onChange }: { visible: boolean; on: boolean; onChange(on: boolean): void }) {
+  if (!visible) return null
+  return <div className="settings-row">
+    <div className="settings-row-copy">
+      <label htmlFor="settings-next-meeting" className="settings-label">{t('Show the next meeting')}</label>
+      <p id="next-meeting-description" className="settings-description">{osWords({
+        mac: t('Beside the Yogurt icon in the menu bar.'),
+        windows: t('In the tooltip of the Yogurt icon in the notification area.'),
+        linux: t('In the tooltip of the Yogurt icon in the tray.'),
+      })}</p>
+    </div>
+    <button id="settings-next-meeting" role="switch" aria-checked={on} aria-describedby="next-meeting-description" onClick={() => onChange(!on)} className="settings-toggle">
+      <span className="settings-toggle-knob" />
+    </button>
+  </div>
+}
 
 const THEMES = () => [['system', osWords({ mac: t('Match my Mac'), windows: t('Match Windows'), linux: t('Match my system') })], ['light', t('Light')], ['dark', t('Dark')]] as const
 // each computer's own words for starting at login and its icon's place: the menu bar, the notification area, the tray
@@ -62,7 +79,7 @@ function useSettingSave(actionId: string, refresh: () => void) {
 /** focus: the setting requested by the entry point */
 export function Settings({ revision = 0, focus }: { revision?: number; focus?: string }) {
   const [perms, setPerms] = useState<PermissionStatus>()
-  const [prefs, setPrefs] = useState<{ theme: Theme; openAtLogin: boolean; showInMenuBar: boolean; appVisibility: AppVisibility; myName: string; macName: string; stopWhenCallEnds: boolean; recordingReminder: boolean; keepRecordings: boolean }>()
+  const [prefs, setPrefs] = useState<Awaited<ReturnType<typeof window.yogurt.settings.get>>>()
   const [name, setName] = useState('')
   const [generalReady, setGeneralReady] = useState(false)
   const scroll = useScrollMemory<HTMLDivElement>('settings', !!prefs && !!perms)
@@ -108,6 +125,14 @@ export function Settings({ revision = 0, focus }: { revision?: number; focus?: s
     if (!prefs) return
     await window.yogurt.settings.setShowInMenuBar(!prefs.showInMenuBar)
     setPrefs(await window.yogurt.settings.get())
+  }
+  const recordingPill = () => {
+    if (!prefs?.showInMenuBar || general.busy) return
+    const on = !prefs.showRecordingPill
+    void general.save(async () => {
+      await window.yogurt.settings.setShowRecordingPill(on)
+      setPrefs(await window.yogurt.settings.get())
+    }, 'recording-pill-retry')
   }
   const visibility = async (choice: AppVisibility) => {
     await window.yogurt.settings.setAppVisibility(choice)
@@ -168,12 +193,27 @@ export function Settings({ revision = 0, focus }: { revision?: number; focus?: s
               <button data-testid="menu-bar-toggle" role="switch" aria-checked={!!prefs?.showInMenuBar} aria-label={trayLabel()} onClick={menuBar}
                 className="settings-toggle"><span className="settings-toggle-knob" /></button>
             </div>}
+            <NextMeetingSetting visible={!!prefs?.showInMenuBar} on={prefs?.showNextMeeting ?? true} onChange={async on => {
+              await window.yogurt.settings.setShowNextMeeting(on)
+              setPrefs(p => p && { ...p, showNextMeeting: on })
+            }} />
+            {onMac() && <div className="settings-row">
+              <div className="settings-row-copy">
+                <label htmlFor="recording-pill-toggle" className="settings-label">{t('Show floating recording pill')}</label>
+                <p id="recording-pill-description" className="settings-description">{prefs?.showInMenuBar === false
+                  ? t('Show Yogurt in the menu bar to hide the pill.')
+                  : t('Appears while you record with Yogurt in the background.')}</p>
+              </div>
+              <button id="recording-pill-toggle" data-testid="recording-pill-toggle" role="switch" disabled={general.busy} aria-checked={prefs?.showRecordingPill ?? true}
+                aria-disabled={!prefs?.showInMenuBar} aria-describedby="recording-pill-description"
+                className="settings-toggle" onClick={recordingPill}><span className="settings-toggle-knob" /></button>
+            </div>}
             <div className="settings-row">
               <div className="settings-row-copy">
-                <p className="settings-label">{t('Finish recording when the call ends')}</p>
+                <p className="settings-label">{t('Stop recording when the call ends')}</p>
                 <p className="settings-description">{t('Automatically end the recording a few seconds after you hang up.')}</p>
               </div>
-              <button data-testid="autostop-toggle" disabled={!prefs || general.busy} role="switch" aria-checked={!!prefs?.stopWhenCallEnds} aria-label={t('Finish recording when the call ends')} onClick={autoStop}
+              <button data-testid="autostop-toggle" disabled={!prefs || general.busy} role="switch" aria-checked={!!prefs?.stopWhenCallEnds} aria-label={t('Stop recording when the call ends')} onClick={autoStop}
                 className="settings-toggle">
                 <span className="settings-toggle-knob" />
               </button>
@@ -192,6 +232,21 @@ export function Settings({ revision = 0, focus }: { revision?: number; focus?: s
               await window.yogurt.settings.setKeepRecordings(on)
               setPrefs(p => p && { ...p, keepRecordings: on })
             }} />
+            <div className="settings-row">
+              <div className="settings-row-copy">
+                <label htmlFor="recording-credit" className="settings-label">{t('Add “{credit}”', { credit: t('Recorded with {app}', { app: 'Yogurt' }) })}</label>
+                <p id="recording-credit-description" className="settings-description">{t('On copied summaries and saved Markdown files.')}</p>
+              </div>
+              <button id="recording-credit" role="switch" aria-checked={prefs?.includeRecordingCredit ?? true} aria-describedby="recording-credit-description"
+                disabled={!prefs || general.busy} className="settings-toggle" onClick={() => {
+                  if (!prefs) return
+                  const on = !prefs.includeRecordingCredit
+                  void general.save(async () => {
+                    await window.yogurt.settings.setIncludeRecordingCredit(on)
+                    setPrefs(p => p && { ...p, includeRecordingCredit: on })
+                  }, 'recording-credit-retry')
+                }}><span className="settings-toggle-knob" /></button>
+            </div>
             <NotesModel reveal={focus === 'notes-model'} />
           </LoadingContent></div>
 
@@ -210,7 +265,7 @@ export function Settings({ revision = 0, focus }: { revision?: number; focus?: s
             <Jargon />
           </div>
 
-          <Backup />
+          <Backup onImported={() => { void window.yogurt.settings.get().then(setPrefs) }} />
 
           <AiApps />
 
@@ -282,7 +337,7 @@ function AppLanguage() {
   const system = LOCALES.find((l) => l.id === s?.systemLocale)?.name ?? 'English'
   return (
     <LoadingContent pending={!s} testId="language-loading"><div className="settings-row">
-      <span className="settings-permission-icon"><Globe size={17} strokeWidth={1.75} aria-hidden="true" /></span>
+      <span className="settings-permission-icon"><Globe size={17} aria-hidden="true" /></span>
       <div className="settings-row-copy">
         <label htmlFor="settings-app-language" className="settings-label">{t('App language')}</label>
         <p className="settings-description">{t("This changes the language of Yogurt's menus and buttons.")}</p>
@@ -308,7 +363,7 @@ function SummaryLanguage() {
   }
   return (
     <LoadingContent pending={language === undefined}><div className="settings-row">
-      <span className="settings-permission-icon"><FileText size={17} strokeWidth={1.75} aria-hidden="true" /></span>
+      <span className="settings-permission-icon"><FileText size={17} aria-hidden="true" /></span>
       <div className="settings-row-copy">
         <label htmlFor="settings-summary-language" className="settings-label">{t('Summary language')}</label>
         <p id="settings-summary-language-description" className="settings-description">{t('Used for new summaries and when you write them again.')}</p>
@@ -332,7 +387,7 @@ export function PermissionRow({ kind, status, onAsk }: { kind: PermissionKind; s
   const granted = status === 'granted'
   return (
     <li data-testid="permission-row" data-kind={kind} data-status={status ?? ''} className="settings-row">
-      <span className="settings-permission-icon"><Icon size={17} strokeWidth={1.75} aria-hidden="true" /></span>
+      <span className="settings-permission-icon"><Icon size={17} aria-hidden="true" /></span>
       <div className="settings-row-copy">
         <p className="settings-permission-label">
           {c.name}
@@ -357,7 +412,7 @@ export function PermissionRow({ kind, status, onAsk }: { kind: PermissionKind; s
 type Said = { kind: 'exported'; count: number } | { kind: 'imported'; added: number; skipped: number } | { kind: 'error'; text: string; meetingId?: string }
 
 /** every meeting to one file, and back: for a new Mac or after reinstalling */
-function Backup() {
+function Backup({ onImported }: { onImported(): void }) {
   const [recording, setRecording] = useState(false)
   const [busy, setBusy] = useState<'export' | 'import' | null>(null)
   const [said, setSaid] = useState<Said | null>(null)
@@ -380,7 +435,7 @@ function Backup() {
   const importAll = async () => {
     setBusy('import'); setSaid(null)
     const r = await window.yogurt.backup.import().catch(() => ({ ok: false, error: 'failed' } as const)).finally(() => setBusy(null))
-    if (r.ok) { setSaid({ kind: 'imported', added: r.added, skipped: r.skipped }); return }
+    if (r.ok) { onImported(); setSaid({ kind: 'imported', added: r.added, skipped: r.skipped }); return }
     const text = {
       cancelled: '', recording: t('You can import once the recording stops.'),
       newer: t('This backup is from a newer Yogurt. Update Yogurt, then try again.'),
@@ -423,7 +478,7 @@ function Backup() {
   )
 }
 
-/** AI apps on this Mac reading meetings through MCP: off until turned on, with what that means */
+/** AI apps on this Mac using meetings through MCP: reading off until turned on, changes off until turned on too, with what that means */
 function AiApps() {
   const [status, setStatus] = useState<McpStatus>()
   const [copied, setCopied] = useState(false)
@@ -433,6 +488,7 @@ function AiApps() {
   }, [])
   const change = useSettingSave('ai-apps-retry', useCallback(() => { void window.yogurt.mcp.status().then(setStatus) }, []))
   const toggle = () => status && change.save(async () => { setStatus(await window.yogurt.mcp.set(!status.enabled)) })
+  const toggleChanges = () => status && change.save(async () => { setStatus(await window.yogurt.mcp.setChanges(!status.changes)) })
   const copy = () => { if (status) void navigator.clipboard.writeText(status.command).then(() => setCopied(true)) }
   const on = !!status?.enabled
   return (
@@ -449,6 +505,17 @@ function AiApps() {
           </button>
         </div>
 
+        {on && status &&
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <p className="settings-label">{t('Let AI apps make changes')}</p>
+              <p className="settings-description">{t('They can file and rename meetings, edit notes, start and stop recording, and bring in meetings from other notes apps. Nothing is deleted for good: removed meetings go to the Trash.')}</p>
+            </div>
+            <button data-testid="ai-apps-changes-toggle" disabled={change.busy} role="switch" aria-checked={status.changes} aria-label={t('Let AI apps make changes')} onClick={toggleChanges} className="settings-toggle">
+              <span className="settings-toggle-knob" />
+            </button>
+          </div>
+        }
         {on && status &&
           <div className="settings-row">
             <div className="settings-row-copy">

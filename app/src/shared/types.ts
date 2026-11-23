@@ -1,3 +1,4 @@
+import type { MeterPacket } from './speechWave'
 import type { AudioUploadFile, AudioUploadStatus } from './audioUpload'
 import type { RendererError } from './rendererError'
 import type { WidgetLayout, WidgetSurface } from './widgetMorph'
@@ -54,7 +55,7 @@ export type YogurtApi = {
     state(): Promise<WidgetView | null>
     onState(cb: (v: WidgetView | null) => void): () => void
     /** sound levels 0..1, about 10 a second */
-    onLevel(cb: (lv: { me: number; them: number }) => void): () => void
+    onLevel(cb: (lv: MeterPacket) => void): () => void
     open(): void
     stop(): void
     layout(): Promise<WidgetLayout | null>
@@ -160,6 +161,7 @@ export type YogurtApi = {
   mcp: {
     status(): Promise<McpStatus>
     set(on: boolean): Promise<McpStatus>
+    setChanges(on: boolean): Promise<McpStatus>
     onClients(fn: (clients: string[]) => void): () => void
   }
   updates: {
@@ -216,6 +218,8 @@ export type YogurtApi = {
   }
   /** questions across every meeting, in saved conversations (the Chat page) */
   conversations: {
+    waitsForMeeting(): Promise<boolean>
+    onRecordingWait(cb: (waiting: boolean) => void): () => void
     /** newest first */
     list(): Promise<ConversationSummary[]>
     current(chips: ContextChip[], fresh?: boolean): Promise<string>
@@ -224,8 +228,8 @@ export type YogurtApi = {
     draft(id: string, text: string): Promise<void>
     targets(query: string): Promise<ContextTarget[]>
     get(id: string): Promise<ConversationView | null>
-    /** id null starts a new conversation; resolves to its id once the question is saved (null: nothing asked). The answer streams in through onChange */
-    ask(id: string | null, question: string): Promise<string | null>
+    /** id null starts a new conversation; resolves to its id once the question is saved (null for an invalid request), or the active recording wait. The answer streams in through onChange */
+    ask(id: string | null, question: string): Promise<string | null | { waitsForMeeting: true }>
     /** a conversation about one meeting opened: its meeting is read into the model ahead of a question */
     warm(id: string): void
     stop(id: string): void
@@ -274,15 +278,18 @@ export type YogurtApi = {
   }
   settings: {
     /** myName: what the person is called in meetings (their Mac's full name, macName, when they never changed it) */
-    get(): Promise<{ theme: Theme; openAtLogin: boolean; showInMenuBar: boolean; appVisibility: AppVisibility; /** the language picked; '' follows the Mac */ language: string; /** the language in use */ locale: string; /** the Mac's language, among Yogurt's */ systemLocale: string; myName: string; macName: string; /** a recording stops by itself when its call ends (off: ask first) */ stopWhenCallEnds: boolean; recordingReminder: boolean; keepRecordings: boolean; /** personal jargon, spelled as typed */ jargon: string[]; /** the language people speak in meetings */ spoken: import('./spoken').Spoken; /** default summary language; '' follows the meeting */ summaryLanguage: string }>
+    get(): Promise<{ theme: Theme; openAtLogin: boolean; showInMenuBar: boolean; showNextMeeting: boolean; showRecordingPill: boolean; appVisibility: AppVisibility; /** the language picked; '' follows the Mac */ language: string; /** the language in use */ locale: string; /** the Mac's language, among Yogurt's */ systemLocale: string; myName: string; macName: string; /** a recording stops by itself when its call ends (off: ask first) */ stopWhenCallEnds: boolean; recordingReminder: boolean; includeRecordingCredit: boolean; keepRecordings: boolean; /** personal jargon, spelled as typed */ jargon: string[]; /** the language people speak in meetings */ spoken: import('./spoken').Spoken; /** default summary language; '' follows the meeting */ summaryLanguage: string }>
     /** blank goes back to the Mac's full name */
     setName(name: string): Promise<void>
     setTheme(v: Theme): Promise<void>
     setOpenAtLogin(on: boolean): Promise<void>
     setShowInMenuBar(on: boolean): Promise<void>
+    setShowNextMeeting(on: boolean): Promise<void>
+    setShowRecordingPill(on: boolean): Promise<void>
     setAppVisibility(choice: AppVisibility): Promise<void>
     setStopWhenCallEnds(on: boolean): Promise<void>
     setRecordingReminder(on: boolean): Promise<void>
+    setIncludeRecordingCredit(on: boolean): Promise<void>
     setKeepRecordings(on: boolean): Promise<void>
     /** saves the whole list; gives back what was kept */
     setJargon(terms: string[]): Promise<string[]>
@@ -460,6 +467,7 @@ export type ConversationView = {
 export type ConversationSummary = { id: string; title: string; updatedAt: number; chips: ContextTarget[]; draft: string }
 
 /** enabled: in Settings. clients: apps connected now. command: the program to give an AI app */
-export type McpStatus = { enabled: boolean; clients: string[]; command: string }
+/** changes: AI apps may also change meetings, notes and a few settings (off unless turned on) */
+export type McpStatus = { enabled: boolean; changes: boolean; clients: string[]; command: string }
 /** Settings → Updates. available: this build updates itself (not in development or a preview); next: the version found */
 export type UpdateStatus = { version: string; available: boolean; on: boolean; state: 'idle' | 'checking' | 'latest' | 'downloading' | 'ready' | 'error'; next?: string; dismissed?: boolean }
